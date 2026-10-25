@@ -24,9 +24,28 @@
       }
     },
     {
-      "source": "/(.*)",
+      "source": "/assets/(.*)",
       "destination": {
         "service": "client"
+      }
+    },
+    {
+      "source": "/favicon.svg",
+      "destination": {
+        "service": "client"
+      }
+    },
+    {
+      "source": "/manifest.webmanifest",
+      "destination": {
+        "service": "client"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "client",
+        "path": "/index.html"
       }
     }
   ]
