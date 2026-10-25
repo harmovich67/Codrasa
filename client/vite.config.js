@@ -14,9 +14,23 @@ function spaFallbackPlugin() {
       try {
         const dist = path.resolve(import.meta.dirname, 'dist');
         const indexHtml = path.join(dist, 'index.html');
-        const notFoundHtml = path.join(dist, '404.html');
-        if (fs.existsSync(indexHtml)) {
-          fs.copyFileSync(indexHtml, notFoundHtml);
+        if (!fs.existsSync(indexHtml)) return;
+        const routes = [
+          '404.html',
+          'setup.html',
+          'login.html',
+          'courses.html',
+          'students.html',
+          'sandbox.html',
+          'settings.html',
+          'skills.html',
+          'requests.html',
+          'payments.html',
+          'questions.html',
+          'my-questions.html',
+        ];
+        for (const file of routes) {
+          fs.copyFileSync(indexHtml, path.join(dist, file));
         }
       } catch {}
     },
