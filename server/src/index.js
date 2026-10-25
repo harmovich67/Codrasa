@@ -2,7 +2,7 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { UPLOADS_DIR } from './db.js';
+import { UPLOADS_DIR, syncToCloud } from './db.js';
 import { errorHandler } from './utils.js';
 import authRoutes from './routes/auth.js';
 import courseRoutes from './routes/courses.js';
@@ -21,6 +21,39 @@ import { startBackups } from './backup.js';
 const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '15mb' }));
+
+// Auto-persist database snapshot to cloud on mutating requests
+app.use((req, res, next) => {
+  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
+    const originalJson = res.json.bind(res);
+    const originalSend = res.send.bind(res);
+    let synced = false;
+
+    const doSync = async () => {
+      if (!synced && res.statusCode < 400) {
+        synced = true;
+        await syncToCloud();
+      }
+    };
+
+    res.json = async function (body) {
+      await doSync();
+      return originalJson(body);
+    };
+
+    res.send = async function (body) {
+      await doSync();
+      return originalSend(body);
+    };
+
+    res.on('finish', () => {
+      if (!synced && res.statusCode < 400) {
+        syncToCloud();
+      }
+    });
+  }
+  next();
+});
 
 app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d' }));
 

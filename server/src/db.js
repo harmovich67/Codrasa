@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { neon } from '@neondatabase/serverless';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DATA_DIR = process.env.DATA_DIR
@@ -15,7 +16,67 @@ fs.mkdirSync(AUDIO_DIR, { recursive: true });
 
 const seedDb = path.join(root, 'data', 'codrasa.db');
 const targetDb = path.join(DATA_DIR, 'codrasa.db');
-if (process.env.VERCEL && fs.existsSync(seedDb) && !fs.existsSync(targetDb)) {
+
+const NEON_URL = process.env.DATABASE_URL || 'postgresql://neondb_owner:REDACTED_PASSWORD@ep-rough-rain-b457i2gr-pooler.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require';
+let sqlClient = null;
+try {
+  sqlClient = neon(NEON_URL);
+} catch (e) {
+  console.warn('[DB] Neon client init error:', e.message);
+}
+
+export async function syncFromCloud() {
+  if (!sqlClient) return false;
+  try {
+    const rows = await sqlClient`SELECT db_base64 FROM codrasa_db_sync WHERE id = 1`;
+    if (rows && rows.length > 0 && rows[0].db_base64 && rows[0].db_base64.length > 100) {
+      const buf = Buffer.from(rows[0].db_base64, 'base64');
+      fs.writeFileSync(targetDb, buf);
+      console.log(`[DB Sync] Restored database from cloud sync (${buf.length} bytes)`);
+      return true;
+    }
+  } catch (err) {
+    console.warn('[DB Sync] Could not restore from cloud:', err.message);
+  }
+  return false;
+}
+
+export async function syncToCloud() {
+  if (!sqlClient || !fs.existsSync(targetDb)) return;
+  try {
+    try {
+      db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+    } catch {}
+    const buf = fs.readFileSync(targetDb);
+    const b64 = buf.toString('base64');
+    try {
+      await sqlClient`INSERT INTO codrasa_db_sync (id, db_base64, updated_at) VALUES (1, ${b64}, CURRENT_TIMESTAMP) ON CONFLICT (id) DO UPDATE SET db_base64 = EXCLUDED.db_base64, updated_at = CURRENT_TIMESTAMP`;
+    } catch (e) {
+      if (e.message && e.message.includes('relation "codrasa_db_sync" does not exist')) {
+        await sqlClient`CREATE TABLE IF NOT EXISTS codrasa_db_sync (id INT PRIMARY KEY, db_base64 TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`;
+        await sqlClient`INSERT INTO codrasa_db_sync (id, db_base64, updated_at) VALUES (1, ${b64}, CURRENT_TIMESTAMP) ON CONFLICT (id) DO UPDATE SET db_base64 = EXCLUDED.db_base64, updated_at = CURRENT_TIMESTAMP`;
+      } else {
+        throw e;
+      }
+    }
+    console.log(`[DB Sync] Persisted database to cloud sync (${buf.length} bytes)`);
+  } catch (err) {
+    console.error('[DB Sync] Failed to persist to cloud:', err.message);
+  }
+}
+
+// 1. Try to restore latest DB from cloud snapshot
+let restored = false;
+if (sqlClient) {
+  try {
+    restored = await syncFromCloud();
+  } catch (e) {
+    console.warn('[DB Sync] Initial restore failed:', e.message);
+  }
+}
+
+// 2. If not restored, copy seed if available
+if (!restored && process.env.VERCEL && fs.existsSync(seedDb) && !fs.existsSync(targetDb)) {
   try {
     fs.copyFileSync(seedDb, targetDb);
   } catch {}
