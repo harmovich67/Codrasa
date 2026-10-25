@@ -1,8 +1,9 @@
-import { PhpWeb } from 'php-wasm/PhpWeb.mjs';
+import './phpShim.js';
 
 let phpInstance = null;
 
 const ready = (async () => {
+  const { PhpWeb } = await import('php-wasm/PhpWeb.mjs');
   const php = new PhpWeb();
   await php.binary;
   phpInstance = php;
