@@ -20,7 +20,7 @@ const blank = (t_ms, language) => ({
   required: true,
   options: ['', ''],
   answer: 0,
-  starter_code: language === 'javascript' ? '// اكتب الحل هنا\n' : language === 'python' ? '# اكتب الحل هنا\n' : '',
+  starter_code: language === 'javascript' ? '// اكتب الحل هنا\n' : language === 'python' ? '# اكتب الحل هنا\n' : language === 'php' ? "<?php\n// اكتب الحل هنا\n" : '',
   expected_output: '',
 });
 
@@ -168,7 +168,7 @@ export default function CheckpointEditor({ lesson, draftRequest }) {
 function Challenge({ index, item: c, stat, language, duration, update, remove }) {
   const [solution, setSolution] = useState('');
   const [running, setRunning] = useState(false);
-  const canCode = language === 'javascript' || language === 'python';
+  const canCode = language === 'javascript' || language === 'python' || language === 'php';
 
   async function captureOutput() {
     if (!solution.trim()) return toast.info('اكتب الحل النموذجي الأول');

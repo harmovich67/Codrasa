@@ -12,6 +12,7 @@
     "emmet-monaco-es": "^5.7.0",
     "fix-webm-duration": "^1.0.6",
     "lucide-react": "^1.61.0",
+    "php-wasm": "^0.2.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-markdown": "^10.1.0",

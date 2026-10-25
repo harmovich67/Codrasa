@@ -277,5 +277,70 @@ export async function runPython(code, { timeout = 5000, loadTimeout = 90000 } = 
   });
 }
 
+let phpWorkerInstance = null;
+let phpReady = null;
+let phpRun = 0;
+
+function getPhpWorker() {
+  if (phpWorkerInstance) return phpWorkerInstance;
+  toast.info('بنحمّل PHP لأول مرة… ثواني بسيطة ومرة واحدة بس');
+  phpWorkerInstance = new Worker(new URL('./phpWorker.js', import.meta.url), { type: 'module' });
+  phpReady = new Promise((resolve, reject) => {
+    const onMsg = ({ data }) => {
+      if (data.type === 'ready') resolve();
+      else if (data.type === 'fatal') reject(new Error(data.text));
+      else return;
+      phpWorkerInstance?.removeEventListener('message', onMsg);
+    };
+    phpWorkerInstance.addEventListener('message', onMsg);
+  });
+  phpReady.catch(() => {
+    phpWorkerInstance?.terminate();
+    phpWorkerInstance = null;
+  });
+  return phpWorkerInstance;
+}
+
+export async function runPhp(code, { timeout = 5000, loadTimeout = 90000 } = {}) {
+  const started = performance.now();
+  const lines = [];
+  const worker = getPhpWorker();
+  const loadTimer = new Promise((resolve) => setTimeout(() => resolve('timeout'), loadTimeout));
+  try {
+    if ((await Promise.race([phpReady, loadTimer])) === 'timeout') throw new Error('تحميل PHP أخد وقت طويل — اتأكد من النت وجرّب تاني');
+  } catch (err) {
+    return { lines: [{ type: 'error', text: String(err.message || err) }], error: true, ms: Math.round(performance.now() - started) };
+  }
+  const id = ++phpRun;
+  const runStarted = performance.now();
+  return new Promise((resolve) => {
+    let finished = false;
+    const finish = (timedOut = false) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      worker.removeEventListener('message', onMsg);
+      if (timedOut) {
+        worker.terminate();
+        if (phpWorkerInstance === worker) phpWorkerInstance = null;
+        lines.push({ type: 'error', text: `⏱ توقف التنفيذ بعد ${timeout / 1000} ثوانٍ (حلقة لا نهائية؟)` });
+      }
+      resolve({ lines, error: lines.some((l) => l.type === 'error'), ms: Math.round(performance.now() - runStarted) });
+    };
+    const timer = setTimeout(() => finish(true), timeout);
+    function onMsg({ data }) {
+      if (data.id !== id) return;
+      if (data.type === 'done') finish();
+      else if (lines.length < 500) lines.push({ type: data.type, text: data.text });
+    }
+    worker.addEventListener('message', onMsg);
+    worker.postMessage({ id, code });
+  });
+}
+
 // One entry point for every language the browser can run.
-export const runCode = (language, code, options) => (language === 'python' ? runPython(code, options) : runJavaScript(code, options));
+export const runCode = (language, code, options) => {
+  if (language === 'python') return runPython(code, options);
+  if (language === 'php') return runPhp(code, options);
+  return runJavaScript(code, options);
+};

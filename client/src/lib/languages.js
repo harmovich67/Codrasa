@@ -7,7 +7,7 @@ export const LANGUAGES = [
   { id: 'java', label: 'Java' },
   { id: 'cpp', label: 'C++' },
   { id: 'csharp', label: 'C#' },
-  { id: 'php', label: 'PHP' },
+  { id: 'php', label: 'PHP', runnable: true },
   { id: 'sql', label: 'SQL' },
   { id: 'json', label: 'JSON' },
   { id: 'markdown', label: 'Markdown' },
@@ -17,7 +17,9 @@ export const langInfo = (id) => LANGUAGES.find((l) => l.id === id) || { id, labe
 
 export const STARTERS = {
   javascript: "// اكتب الكود هنا واضغط Ctrl+Enter للتشغيل\nconsole.log('أهلًا من Codrasa!');\n",
-  // HTML starts empty on purpose: typing "!" or "html5" builds the whole skeleton (see editorSetup.js).
+  python: "# اكتب الكود هنا واضغط Ctrl+Enter للتشغيل\nprint('أهلًا من Codrasa!')\n",
+  php: "<?php\n// اكتب الكود هنا واضغط Ctrl+Enter للتشغيل\necho \"أهلًا من Codrasa!\\n\";\n",
+  // HTML starts empty on purpose: typing \"!\" or \"html5\" builds the whole skeleton (see editorSetup.js).
   html: '',
 };
 

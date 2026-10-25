@@ -34,7 +34,7 @@ export function validateCheckpoints(value, duration, language) {
       if (!Number.isInteger(item.answer) || item.answer < 0 || item.answer >= options.length) throw httpError(400, 'حدد الإجابة الصحيحة لكل تحدٍ');
       Object.assign(checkpoint, { options, answer: item.answer });
     } else {
-      if (!['javascript', 'python'].includes(language)) throw httpError(400, 'تحديات تشغيل الكود متاحة حاليًا لـ JavaScript وPython؛ استخدم الاختيارات للغات الأخرى');
+      if (!['javascript', 'python', 'php'].includes(language)) throw httpError(400, 'تحديات تشغيل الكود متاحة حاليًا لـ JavaScript وPython وPHP؛ استخدم الاختيارات للغات الأخرى');
       if (typeof item.expected_output !== 'string' || !normalizeOutput(item.expected_output) || item.expected_output.length > 20000) throw httpError(400, 'اكتب ناتج التشغيل المتوقع لتحدي الكود');
       if (typeof item.starter_code !== 'string' || item.starter_code.length > 50000) throw httpError(400, 'كود البداية أطول من المسموح');
       Object.assign(checkpoint, { starter_code: item.starter_code, expected_output: normalizeOutput(item.expected_output) });
