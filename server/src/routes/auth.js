@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { get, getSetting } from '../db.js';
+import { get, getSetting, syncFromCloud } from '../db.js';
 import { signToken, publicUser, requireAuth, createUser, checkPassword } from '../auth.js';
 import { httpError } from '../utils.js';
 
@@ -7,7 +7,14 @@ const r = Router();
 
 const teacherExists = () => !!get("SELECT 1 AS x FROM users WHERE role = 'teacher' LIMIT 1");
 
-r.get('/setup-needed', (req, res) => res.json({ needed: !teacherExists() }));
+r.get('/setup-needed', async (req, res) => {
+  let needed = !teacherExists();
+  if (needed) {
+    await syncFromCloud();
+    needed = !teacherExists();
+  }
+  res.json({ needed });
+});
 
 // First run: the very first account becomes the teacher (platform owner).
 r.post('/setup', (req, res) => {
@@ -22,9 +29,13 @@ r.post('/register', (req, res) => {
   res.json({ token: signToken(user), user: publicUser(user) });
 });
 
-r.post('/login', (req, res) => {
+r.post('/login', async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
-  const user = get('SELECT * FROM users WHERE email = ?', email);
+  let user = get('SELECT * FROM users WHERE email = ?', email);
+  if (!user) {
+    await syncFromCloud();
+    user = get('SELECT * FROM users WHERE email = ?', email);
+  }
   if (!user || !checkPassword(req.body.password, user.password_hash)) {
     throw httpError(401, 'البريد أو كلمة المرور غير صحيحة');
   }

@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import { get, run, getSetting, setSetting } from './db.js';
+import { get, run, getSetting, setSetting, syncFromCloud } from './db.js';
 import { httpError } from './utils.js';
 
 let secret = process.env.JWT_SECRET || getSetting('jwt_secret') || 'codrasa_permanent_jwt_secret_2026_wamid';
@@ -15,7 +15,7 @@ export const signToken = (user) => jwt.sign({ id: user.id, role: user.role }, se
 
 export const publicUser = (u) => ({ id: u.id, name: u.name, email: u.email, role: u.role, phone: u.phone });
 
-export function requireAuth(req, res, next) {
+export async function requireAuth(req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   let user = null;
@@ -23,6 +23,10 @@ export function requireAuth(req, res, next) {
     try {
       const payload = jwt.verify(token, secret);
       user = get('SELECT id, name, email, role, phone FROM users WHERE id = ?', payload.id);
+      if (!user) {
+        await syncFromCloud();
+        user = get('SELECT id, name, email, role, phone FROM users WHERE id = ?', payload.id);
+      }
     } catch {
       user = null;
     }
