@@ -4,12 +4,24 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const DATA_DIR = path.resolve(root, process.env.DATA_DIR || 'data');
+export const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(root, process.env.DATA_DIR)
+  : process.env.VERCEL
+    ? '/tmp/data'
+    : path.resolve(root, 'data');
 export const UPLOADS_DIR = path.join(DATA_DIR, 'uploads');
 export const AUDIO_DIR = path.join(UPLOADS_DIR, 'audio');
 fs.mkdirSync(AUDIO_DIR, { recursive: true });
 
-export const db = new DatabaseSync(path.join(DATA_DIR, 'codrasa.db'));
+const seedDb = path.join(root, 'data', 'codrasa.db');
+const targetDb = path.join(DATA_DIR, 'codrasa.db');
+if (process.env.VERCEL && fs.existsSync(seedDb) && !fs.existsSync(targetDb)) {
+  try {
+    fs.copyFileSync(seedDb, targetDb);
+  } catch {}
+}
+
+export const db = new DatabaseSync(targetDb);
 db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
 
 db.exec(`

@@ -50,5 +50,9 @@ app.use(errorHandler);
 const PORT = Number(process.env.PORT) || 4000;
 app.listen(PORT, () => {
   console.log(`Codrasa API → http://localhost:${PORT}`);
-  startBackups();
+  if (!process.env.VERCEL) {
+    startBackups();
+  }
 });
+
+export default app;
