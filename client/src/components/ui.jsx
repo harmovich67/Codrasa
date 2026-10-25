@@ -107,17 +107,31 @@ export function Modal({ open, onClose, title, children, footer, wide }) {
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex animate-fade items-end justify-center bg-slate-900/40 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={onClose}>
-      <div
-        className={cx('max-h-[90dvh] w-full animate-sheet overflow-auto rounded-t-3xl border border-line bg-panel pb-[env(safe-area-inset-bottom)] shadow-float sm:animate-none sm:rounded-2xl', wide ? 'max-w-3xl' : 'max-w-lg')}
-        onMouseDown={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b border-line px-5 py-4">
-          <h3 className="font-semibold">{title}</h3>
-          <IconButton icon={X} title="إغلاق" onClick={onClose} />
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-sm animate-fade p-0 sm:p-4"
+      onMouseDown={onClose}
+    >
+      <div className="flex min-h-full items-end justify-center sm:items-center">
+        <div
+          className={cx(
+            'relative my-auto flex max-h-[90dvh] w-full flex-col rounded-t-3xl border border-line bg-panel shadow-float animate-sheet sm:max-h-[85vh] sm:animate-none sm:rounded-2xl',
+            wide ? 'max-w-3xl' : 'max-w-lg',
+          )}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-4">
+            <h3 className="font-semibold">{title}</h3>
+            <IconButton icon={X} title="إغلاق" onClick={onClose} />
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto space-y-4 p-5">
+            {children}
+          </div>
+          {footer && (
+            <div className="flex shrink-0 justify-end gap-2 border-t border-line px-5 py-4">
+              {footer}
+            </div>
+          )}
         </div>
-        <div className="space-y-4 p-5">{children}</div>
-        {footer && <div className="flex justify-end gap-2 border-t border-line px-5 py-4">{footer}</div>}
       </div>
     </div>
   );
