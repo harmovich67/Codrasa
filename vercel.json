@@ -1,10 +1,15 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "cleanUrls": true,
   "services": {
     "client": {
       "root": "client",
-      "framework": "vite"
+      "framework": "vite",
+      "rewrites": [
+        {
+          "source": "/((?!assets/|.*\.[a-zA-Z0-9]+$).*)",
+          "destination": "/index.html"
+        }
+      ]
     },
     "server": {
       "root": "server",
@@ -14,34 +19,15 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": {
-        "service": "server"
-      }
+      "destination": { "service": "server" }
     },
     {
       "source": "/uploads/(.*)",
-      "destination": {
-        "service": "server"
-      }
-    },
-    {
-      "source": "/assets/(.*)",
-      "destination": {
-        "service": "client"
-      }
-    },
-    {
-      "source": "/((?!assets/|api/|uploads/|.*\\.[a-zA-Z0-9]+$).*)",
-      "destination": {
-        "service": "client",
-        "path": "/index.html"
-      }
+      "destination": { "service": "server" }
     },
     {
       "source": "/(.*)",
-      "destination": {
-        "service": "client"
-      }
+      "destination": { "service": "client" }
     }
   ]
 }
