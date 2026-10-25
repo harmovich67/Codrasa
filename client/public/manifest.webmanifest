@@ -1,0 +1,13 @@
+{
+  "name": "Codrasa",
+  "short_name": "Codrasa",
+  "description": "دروس برمجة حيّة بتتعاد: وقّف، عدّل، شغّل.",
+  "lang": "ar",
+  "dir": "rtl",
+  "display": "standalone",
+  "orientation": "any",
+  "start_url": "/",
+  "background_color": "#f5f6fe",
+  "theme_color": "#6c4cf6",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
