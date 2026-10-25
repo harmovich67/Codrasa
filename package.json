@@ -1,6 +1,9 @@
 {
   "name": "codrasa",
   "private": true,
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "workspaces": [
     "server",
     "client"
