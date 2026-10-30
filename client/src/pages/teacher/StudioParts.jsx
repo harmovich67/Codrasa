@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { TriangleAlert } from 'lucide-react';
 import { Circle, CircleHelp, Mic, MicOff, Pause, Play, Square, StickyNote, X } from 'lucide-react';
 import { fmtTime } from '../../lib/format.js';
 import { toast } from '../../store/toast.js';
@@ -36,6 +37,35 @@ export function useLiveQuestion(session, lesson) {
     />
   );
   return { ask, dialog };
+}
+
+/* True when a voice file the lesson points to can no longer be fetched (e.g. recorded before voice was stored durably). */
+export function useVoiceMissing(lesson) {
+  const [missing, setMissing] = useState(false);
+  const key = (lesson.audio_parts || []).map((part) => part.url).join(',');
+  useEffect(() => {
+    let alive = true;
+    if (!key) {
+      setMissing(false);
+      return undefined;
+    }
+    Promise.all(key.split(',').map((url) => fetch(url, { method: 'HEAD' }).then((res) => res.ok).catch(() => false))).then((results) => alive && setMissing(results.some((ok) => !ok)));
+    return () => {
+      alive = false;
+    };
+  }, [key]);
+  return missing;
+}
+
+export function VoiceMissingNotice() {
+  return (
+    <p className="flex items-start gap-2 rounded-lg border border-amber/40 bg-amber/10 px-3 py-2 text-xs leading-6 text-amber">
+      <TriangleAlert className="mt-1 size-3.5 shrink-0" />
+      <span>
+        ملف الصوت القديم للدرس ده اتمسح من السيرفر (كان بيتخزّن على قرص مؤقت قبل التحديث). الدرس لسه شغال بالكود/السبورة بس من غير صوت. سجّل الدرس تاني بالصوت، وأي صوت هتسجله من دلوقتي بيتحفظ بشكل دائم.
+      </span>
+    </p>
+  );
 }
 
 /* The record / pause / question / stop controls, the same for code lessons and whiteboard lessons. */

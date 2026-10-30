@@ -5,7 +5,7 @@ import { fmtTime } from '../../lib/format.js';
 import BoardEditor from '../../components/Board.jsx';
 import { Button, IconButton } from '../../components/ui.jsx';
 import { useStudioSession } from './useStudioSession.js';
-import { Prompter, RecorderBar, useLiveQuestion } from './StudioParts.jsx';
+import { Prompter, RecorderBar, VoiceMissingNotice, useLiveQuestion, useVoiceMissing } from './StudioParts.jsx';
 
 /* Recording tab for whiteboard lessons (math, physics…): the same studio as code lessons, with a board instead of the editor. */
 export default function BoardRecorderTab({ lesson, form, set, reload }) {
@@ -26,6 +26,7 @@ export default function BoardRecorderTab({ lesson, form, set, reload }) {
     },
   });
   const question = useLiveQuestion(session, lesson);
+  const voiceMissing = useVoiceMissing(lesson);
   const live = session.state === 'recording' || session.state === 'paused';
   const busy = session.state === 'starting' || session.state === 'saving';
   const recorder = live ? session.recorder.current : null;
@@ -48,6 +49,7 @@ export default function BoardRecorderTab({ lesson, form, set, reload }) {
       </RecorderBar>
       {question.dialog}
 
+      {!live && voiceMissing && <VoiceMissingNotice />}
       {!live && (
         <p className="text-xs leading-6 text-muted">
           {timeline ? (

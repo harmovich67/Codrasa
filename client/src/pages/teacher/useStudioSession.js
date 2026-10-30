@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import fixWebmDuration from 'fix-webm-duration';
 import { api } from '../../lib/api.js';
 import { fmtTime } from '../../lib/format.js';
-import { VoiceTrack } from '../../lib/studioAudio.js';
+import { VoiceTrack, uploadVoice } from '../../lib/studioAudio.js';
 import { toast } from '../../store/toast.js';
 
 // What the studio sends back for a checkpoint: only the fields the server validates (it adds revision/progress itself).
@@ -104,10 +104,7 @@ export function useStudioSession({ lesson, language, createRecorder, onStarted, 
           // Chrome's MediaRecorder writes WebM without a duration, which breaks seeking.
           blob = await fixWebmDuration(blob, segment, { logger: false }).catch(() => blob);
         }
-        const fd = new FormData();
-        fd.append('audio', blob, 'voice.webm');
-        const query = continuing ? `?append=1&start=${base.current.duration}&dur=${segment}` : '';
-        await api.upload(`/lessons/${lesson.id}/audio${query}`, fd);
+        await uploadVoice(lesson.id, blob, continuing ? { append: true, start: base.current.duration, dur: segment } : { dur: segment });
       }
       const added = pendingRef.current.length;
       toast.success(`اتحفظ التسجيل (${fmtTime(recording.duration)})${added ? ` مع ${added} سؤال` : ''} ✓`);

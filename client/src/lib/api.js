@@ -42,10 +42,11 @@ async function fail(res) {
 
 async function request(method, url, body) {
   const isForm = body instanceof FormData;
+  const isBlob = body instanceof Blob;
   const res = await fetch(`/api${url}`, {
     method,
-    headers: headers(body !== undefined && !isForm ? { 'Content-Type': 'application/json' } : {}),
-    body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
+    headers: headers(body !== undefined && !isForm ? { 'Content-Type': isBlob ? 'application/octet-stream' : 'application/json' } : {}),
+    body: body === undefined ? undefined : isForm || isBlob ? body : JSON.stringify(body),
   });
   if (!res.ok) throw await fail(res);
   return res.status === 204 ? null : res.json();
@@ -57,6 +58,7 @@ export const api = {
   put: (url, body = {}) => request('PUT', url, body),
   del: (url) => request('DELETE', url),
   upload: (url, formData) => request('POST', url, formData),
+  putBlob: (url, blob) => request('PUT', url, blob),
 
   // Streams a plain-text response, calling onChunk with the accumulated text.
   async stream(url, body, onChunk, signal) {

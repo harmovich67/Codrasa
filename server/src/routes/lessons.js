@@ -1,13 +1,14 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import multer from 'multer';
-import { all, get, run, tx, AUDIO_DIR } from '../db.js';
+import { all, get, run, tx, AUDIO_DIR, sql } from '../db.js';
 import { requireAuth, requireTeacher } from '../auth.js';
 import { loadLessonFor } from '../access.js';
 import { httpError, toInt, parseJSON } from '../utils.js';
 import { aiEnabledFor } from '../ai.js';
+import { finishUpload, isAudioName, putChunk, removeAudioFile } from '../audioStore.js';
 import { activeCheckpoints, checkpointsFor, checkpointRevision, gradeCheckpoint, questionsEnabledFor, requiredComplete, validateCheckpoints } from '../checkpoints.js';
 
 const r = Router();
@@ -23,8 +24,7 @@ const upload = multer({
 });
 
 function removeAudio(file) {
-  if (!file) return;
-  fs.rm(path.join(AUDIO_DIR, path.basename(file)), { force: true }, () => {});
+  if (file) removeAudioFile(path.basename(file));
 }
 
 // A lesson recorded in several sittings has one voice file per sitting: [{ file, start (ms on the lesson clock), dur }].
@@ -118,30 +118,62 @@ r.delete('/:id', requireTeacher, (req, res) => {
   res.json({ ok: true });
 });
 
-r.post('/:id/audio', requireTeacher, upload.single('audio'), (req, res) => {
-  const id = toInt(req.params.id);
-  if (!req.file) throw httpError(400, 'لم يصل ملف صوت صالح');
+// Makes an uploaded voice file the lesson's voice (replacing the old one) or one more sitting's voice (append).
+function attachAudio(id, file, { append, start, dur }) {
   const lesson = get('SELECT audio_file, audio_parts FROM lessons WHERE id = ?', id);
   if (!lesson) {
-    removeAudio(req.file.filename);
+    removeAudio(file);
     throw httpError(404, 'الدرس غير موجود');
   }
-  const start = Math.max(0, Math.round(Number(req.query.start) || 0));
-  const dur = Number(req.query.dur) > 0 ? Math.round(Number(req.query.dur)) : null;
+  const at = Math.max(0, Math.round(Number(start) || 0));
+  const length = Number(dur) > 0 ? Math.round(Number(dur)) : null;
   let parts;
-  if (req.query.append === '1') {
+  if (append) {
     parts = audioParts(lesson);
     if (parts.length >= MAX_AUDIO_PARTS) {
-      removeAudio(req.file.filename);
+      removeAudio(file);
       throw httpError(400, 'وصلت للحد الأقصى لعدد مقاطع الصوت في الدرس');
     }
-    parts.push({ file: req.file.filename, start, dur });
+    parts.push({ file, start: at, dur: length });
   } else {
     removeAllAudio(lesson);
-    parts = [{ file: req.file.filename, start, dur }];
+    parts = [{ file, start: at, dur: length }];
   }
   run('UPDATE lessons SET audio_file = ?, audio_parts = ? WHERE id = ?', parts[0].file, JSON.stringify(parts), id);
-  res.json({ audio_url: `/uploads/audio/${parts[0].file}`, parts: parts.length });
+  return { audio_url: `/uploads/audio/${parts[0].file}`, parts: parts.length };
+}
+
+// Legacy single-request upload (kept for old cached clients); the file is also saved where it survives a deploy.
+r.post('/:id/audio', requireTeacher, upload.single('audio'), async (req, res) => {
+  const id = toInt(req.params.id);
+  if (!req.file) throw httpError(400, 'لم يصل ملف صوت صالح');
+  if (sql) await putChunk(req.file.filename, 0, fs.readFileSync(req.file.path));
+  res.json(attachAudio(id, req.file.filename, { append: req.query.append === '1', start: req.query.start, dur: req.query.dur }));
+});
+
+// Chunked upload: begin -> chunk x N -> complete. Each request stays under the 4.5 MB serverless body limit.
+r.post('/:id/audio/begin', requireTeacher, (req, res) => {
+  const id = toInt(req.params.id);
+  if (!get('SELECT id FROM lessons WHERE id = ?', id)) throw httpError(404, 'الدرس غير موجود');
+  res.json({ file: `${id}-${Date.now()}-${crypto.randomBytes(6).toString('hex')}.webm` });
+});
+
+r.put('/:id/audio/chunk', requireTeacher, express.raw({ type: '*/*', limit: '4mb' }), async (req, res) => {
+  const id = toInt(req.params.id);
+  const file = String(req.query.file || '');
+  const idx = toInt(req.query.i);
+  if (!isAudioName(file) || !file.startsWith(`${id}-`)) throw httpError(400, 'اسم ملف الصوت غير صالح');
+  if (idx === null || idx < 0 || idx > 500 || !Buffer.isBuffer(req.body) || !req.body.length) throw httpError(400, 'جزء الصوت غير صالح');
+  await putChunk(file, idx, req.body);
+  res.json({ ok: true });
+});
+
+r.post('/:id/audio/complete', requireTeacher, async (req, res) => {
+  const id = toInt(req.params.id);
+  const file = String(req.body.file || '');
+  if (!isAudioName(file) || !file.startsWith(`${id}-`)) throw httpError(400, 'اسم ملف الصوت غير صالح');
+  await finishUpload(file, toInt(req.body.total));
+  res.json(attachAudio(id, file, { append: !!req.body.append, start: req.body.start, dur: req.body.dur }));
 });
 
 r.post('/:id/progress', (req, res) => {

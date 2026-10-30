@@ -19,7 +19,7 @@ import {
 import { api } from '../../lib/api.js';
 import { LessonRecorder, createTimeline } from '../../lib/recording.js';
 import { useStudioSession } from './useStudioSession.js';
-import { Prompter, RecorderBar, useLiveQuestion } from './StudioParts.jsx';
+import { Prompter, RecorderBar, VoiceMissingNotice, useLiveQuestion, useVoiceMissing } from './StudioParts.jsx';
 import BoardRecorderTab from './BoardStudio.jsx';
 import { runCode } from '../../lib/runner.js';
 import { fmtTime } from '../../lib/format.js';
@@ -173,6 +173,7 @@ function Recorder({ lesson, form, set, reload }) {
     onStarted: () => editorRef.current?.focus(),
   });
   const question = useLiveQuestion(session, lesson);
+  const voiceMissing = useVoiceMissing(lesson);
   const live = session.state === 'recording' || session.state === 'paused';
   const busy = session.state === 'starting' || session.state === 'saving';
   const canContinue = !existing || lesson.recording.language === form.language;
@@ -225,6 +226,7 @@ function Recorder({ lesson, form, set, reload }) {
       </RecorderBar>
       {question.dialog}
 
+      {!live && voiceMissing && <VoiceMissingNotice />}
       {!live && (
         <p className="text-xs leading-6 text-muted">
           {existing ? (

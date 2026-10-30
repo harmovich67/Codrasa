@@ -41,6 +41,9 @@ function replaceDbFile(buf) {
   db = openDb();
 }
 
+// The Neon client, or null when DATABASE_URL is not set (local dev). Also used to keep lesson voice files off the ephemeral disk.
+export const sql = sqlClient;
+
 export async function syncFromCloud() {
   if (!sqlClient) return false;
   try {

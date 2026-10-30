@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { UPLOADS_DIR, syncToCloud, refreshFromCloud } from './db.js';
+import { ensureLocal } from './audioStore.js';
 import { errorHandler } from './utils.js';
 import authRoutes from './routes/auth.js';
 import courseRoutes from './routes/courses.js';
@@ -56,7 +57,18 @@ app.use((req, res, next) => {
   next();
 });
 
+// A voice file missing from this instance's disk (cold start, new deploy) is rebuilt from Neon before it is served.
+app.use('/uploads/audio', async (req, res, next) => {
+  try {
+    await ensureLocal(path.basename(req.path));
+  } catch (err) {
+    console.warn('[audio] restore failed:', err.message);
+  }
+  next();
+});
 app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d' }));
+// A missing upload is a real 404, not the single-page app (which would hand the audio element an HTML page).
+app.use('/uploads', (req, res) => res.status(404).end());
 
 // Another instance (or local dev) may have pushed a newer snapshot: pull it before answering.
 app.use('/api', async (req, res, next) => {
