@@ -125,6 +125,7 @@ export default function CourseEditor() {
             </Badge>
           ) : null}
           <Badge color="amber">{course.price > 0 ? fmtMoney(course.price, currency) : 'مجاني'}</Badge>
+          {course.subject_name && <Badge color="brand">{course.subject_name}</Badge>}
         </div>
       </PageHeader>
 

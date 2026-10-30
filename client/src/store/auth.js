@@ -4,7 +4,7 @@ import { api, tokenStore, setUnauthorizedHandler } from '../lib/api.js';
 export const useAuth = create((set, getState) => ({
   user: null,
   ready: false,
-  platform: { platform_name: 'Codrasa', allow_registration: true, currency: 'ج.م', payment_phone: '+201022596130' },
+  platform: { platform_name: 'Codrasa', allow_registration: true, currency: 'ج.م', payment_phone: '+201022596130', questions_enabled: true },
 
   async init() {
     const platform = await api.get('/settings/public').catch(() => null);

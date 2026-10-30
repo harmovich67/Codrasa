@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { api } from '../../lib/api.js';
 import { useAuth } from '../../store/auth.js';
-import { Button, Field, Input, Modal, Textarea, Toggle } from '../../components/ui.jsx';
+import { Button, Field, Input, Modal, Select, Textarea, Toggle } from '../../components/ui.jsx';
 
 export const COLORS = ['#7c5cff', '#2dd4a7', '#f5b544', '#f0607a', '#38bdf8', '#a3e635', '#f472b6', '#fb923c'];
 
@@ -8,7 +9,21 @@ export default function CourseForm({ open, onClose, initial, onSubmit, title }) 
   const currency = useAuth((s) => s.platform.currency);
   const [form, setForm] = useState(() => ({ title: '', description: '', price: 0, color: COLORS[0], published: false, ...initial }));
   const [busy, setBusy] = useState(false);
+  const [subjects, setSubjects] = useState([]);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  // A new course starts in the first programming subject unless the teacher picks another.
+  useEffect(() => {
+    if (!open) return;
+    api
+      .get('/subjects')
+      .then((list) => {
+        setSubjects(list);
+        setForm((f) => (f.subject_id ? f : { ...f, subject_id: (list.find((s) => s.kind === 'code') || list[0])?.id }));
+      })
+      .catch(() => {});
+  }, [open]);
+  const subject = subjects.find((s) => s.id === Number(form.subject_id));
 
   async function submit(e) {
     e.preventDefault();
@@ -40,6 +55,20 @@ export default function CourseForm({ open, onClose, initial, onSubmit, title }) 
         <Field label="اسم الكورس">
           <Input value={form.title} onChange={(e) => set('title', e.target.value)} autoFocus required />
         </Field>
+        {subjects.length > 1 && (
+          <Field
+            label="المادة"
+            hint={subject?.kind === 'board' ? 'دروس الكورس ده بتتسجل على سبورة (رسم وكتابة) بدل محرر الكود.' : 'دروس الكورس ده بتتسجل في محرر كود.'}
+          >
+            <Select value={form.subject_id ?? ''} onChange={(e) => set('subject_id', Number(e.target.value))}>
+              {subjects.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} — {s.kind === 'board' ? 'سبورة' : 'محرر كود'}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
         <Field label="الوصف">
           <Textarea value={form.description || ''} onChange={(e) => set('description', e.target.value)} rows={3} />
         </Field>

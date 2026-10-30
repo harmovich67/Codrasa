@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { createTimeline } from '../lib/recording.js';
+import { createBoardTimeline } from '../lib/board.js';
 import { usePlayback } from '../lib/usePlayback.js';
 import { outputText, runCode } from '../lib/runner.js';
 import { fmtTime } from '../lib/format.js';
@@ -33,6 +34,8 @@ import AssistantPanel from '../components/AssistantPanel.jsx';
 import QuestionsPanel from '../components/QuestionsPanel.jsx';
 import QuizPanel from '../components/QuizPanel.jsx';
 import ChallengePanel from '../components/ChallengePanel.jsx';
+import QuestionPopup from '../components/QuestionPopup.jsx';
+import { BoardCanvas } from '../components/Board.jsx';
 import Markdown from '../components/Markdown.jsx';
 import { Badge, Button, Empty, IconButton, PageLoader, Tabs, cx } from '../components/ui.jsx';
 
@@ -116,10 +119,13 @@ function Player({ lesson, startAt, previewAsStudent, startCp }) {
   // The teacher can switch the student assistant off globally or per lesson; teachers always keep it.
   const aiVisible = isTeacher || lesson.ai_enabled;
 
+  // Whiteboard lessons (math, physics…) replay strokes instead of editor events.
+  const isBoard = lesson.kind === 'board';
   const timeline = useMemo(() => createTimeline(lesson.recording), [lesson.recording]);
+  const boardTl = useMemo(() => (isBoard ? createBoardTimeline(lesson.recording) : null), [isBoard, lesson.recording]);
   const duration = timeline.duration;
   const hasRecording = !!lesson.recording && duration > 0;
-  const activity = useMemo(() => timeline.activity(120), [timeline]);
+  const activity = useMemo(() => (boardTl ? boardTl.activity(120) : timeline.activity(120)), [timeline, boardTl]);
 
   const initial = useMemo(() => {
     const p = lesson.progress;
@@ -130,7 +136,7 @@ function Player({ lesson, startAt, previewAsStudent, startCp }) {
     return t;
   }, [startAt, lesson.progress, lesson.checkpoints, duration, isTeacher]);
 
-  const pb = usePlayback(duration, lesson.audio_url, initial);
+  const pb = usePlayback(duration, lesson.audio_parts?.length ? lesson.audio_parts : lesson.audio_url, initial);
   const editorRef = useRef(null);
   const applying = useRef(false);
   const timeRef = useRef(initial);
@@ -250,7 +256,7 @@ function Player({ lesson, startAt, previewAsStudent, startCp }) {
       focusEditor();
     } else {
       leaveMine();
-      focusAside();
+      if (!gated) focusAside(); // students answer choice questions in the popup
     }
   }
   function closeChallenge() {
@@ -528,21 +534,28 @@ function Player({ lesson, startAt, previewAsStudent, startCp }) {
                     </Button>
                   </>
                 ) : (
-                  <Badge color="mint">⏸ الدرس واقف — الكود دلوقتي بتاعك: عدّل وشغّل براحتك</Badge>
+                  <Badge color="mint">{isBoard ? '⏸ الدرس واقف — كمّل لما تحب' : '⏸ الدرس واقف — الكود دلوقتي بتاعك: عدّل وشغّل براحتك'}</Badge>
                 )}
               </div>
 
-              <div className={cx('relative h-[44dvh] min-h-64 shrink-0 overflow-hidden rounded-2xl border shadow-card lg:h-auto lg:flex-1 lg:shrink', active && !active.progress.passed ? 'border-brand/70 shadow-[0_0_0_3px] shadow-brand/15' : mine !== null ? 'border-amber/50' : 'border-line')}>
-                <CodeEditor
-                  language={lesson.language}
-                  readOnly={pb.playing}
-                  onMount={onMount}
-                  onChange={(v) => !applying.current && setMine(v)}
-                  options={{ readOnlyMessage: { value: 'أوقف الدرس (Space) عشان تعدّل الكود بنفسك' } }}
-                />
-              </div>
+              {isBoard ? (
+                // On wide screens the board is the largest 3:2 box that fits the free height (container query units).
+                <div className={cx('flex shrink-0 items-center justify-center rounded-2xl border bg-panel-2 p-1 shadow-card lg:min-h-0 lg:flex-1 lg:shrink lg:[container-type:size]', active && !active.progress.passed ? 'border-brand/70 shadow-[0_0_0_3px] shadow-brand/15' : 'border-line')}>
+                  <BoardCanvas timeline={boardTl} time={pb.time} className="lg:w-[min(100cqw,150cqh)]" />
+                </div>
+              ) : (
+                <div className={cx('relative h-[44dvh] min-h-64 shrink-0 overflow-hidden rounded-2xl border shadow-card lg:h-auto lg:flex-1 lg:shrink', active && !active.progress.passed ? 'border-brand/70 shadow-[0_0_0_3px] shadow-brand/15' : mine !== null ? 'border-amber/50' : 'border-line')}>
+                  <CodeEditor
+                    language={lesson.language}
+                    readOnly={pb.playing}
+                    onMount={onMount}
+                    onChange={(v) => !applying.current && setMine(v)}
+                    options={{ readOnlyMessage: { value: 'أوقف الدرس (Space) عشان تعدّل الكود بنفسك' } }}
+                  />
+                </div>
+              )}
 
-              {info.preview ? (
+              {isBoard ? null : info.preview ? (
                 <OutputPanel html={shownCode} className="h-52" />
               ) : (
                 <OutputPanel
@@ -580,12 +593,12 @@ function Player({ lesson, startAt, previewAsStudent, startCp }) {
                     </option>
                   ))}
                 </select>
-                {info.runnable && (
+                {info.runnable && !isBoard && (
                   <Button size="sm" variant="mint" icon={Terminal} onClick={runMine} loading={running} title="Ctrl+Enter">
                     شغّل
                   </Button>
                 )}
-                {forkId ? (
+                {isBoard ? null : forkId ? (
                   <Button size="sm" variant="subtle" icon={ExternalLink} onClick={() => navigate(`/sandbox/${forkId}`)}>
                     افتح النسخة
                   </Button>
@@ -620,7 +633,7 @@ function Player({ lesson, startAt, previewAsStudent, startCp }) {
                   !lesson.description && <p className="text-sm text-muted">مفيش وصف للدرس ده.</p>
                 )}
                 <div className="rounded-xl border border-line bg-panel-2 p-3 text-xs leading-6 text-muted">
-                  <b className="text-ink">اختصارات:</b> Space تشغيل/إيقاف · ← → تقديم/ترجيع 5 ثواني · Ctrl+Enter تشغيل الكود
+                  <b className="text-ink">اختصارات:</b> Space تشغيل/إيقاف · ← → تقديم/ترجيع 5 ثواني{isBoard ? '' : ' · Ctrl+Enter تشغيل الكود'}
                 </div>
               </div>
             )}
@@ -661,6 +674,23 @@ function Player({ lesson, startAt, previewAsStudent, startCp }) {
           </div>
         </aside>
       </div>
+
+      {gated && active && active.type === 'choice' && (
+        <QuestionPopup
+          key={`${active.id}:${active.revision}`}
+          checkpoint={active}
+          index={cps.findIndex((c) => c.id === active.id) + 1}
+          total={cps.length}
+          result={cpResult}
+          busy={cpBusy}
+          onSubmit={(answer) => attempt({ answer })}
+          onContinue={play}
+          onSkip={skipChallenge}
+          aiEnabled={aiVisible}
+          lessonId={lesson.id}
+          getContext={getContext}
+        />
+      )}
     </div>
   );
 }

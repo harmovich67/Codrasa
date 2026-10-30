@@ -17,32 +17,38 @@ export function applyChanges(code, changes) {
 }
 
 export class LessonRecorder {
-  constructor(editor, language) {
+  // `base` = an existing recording to continue: new events are appended after its last moment.
+  constructor(editor, language, base = null) {
     this.editor = editor;
     this.language = language;
+    this.base = base;
     this.events = [];
     this.subs = [];
     this.t0 = 0;
+    this.pausedAt = null;
   }
 
   now() {
-    return Math.round(performance.now() - this.t0);
+    return Math.round((this.pausedAt ?? performance.now()) - this.t0);
   }
 
   start() {
-    this.t0 = performance.now();
+    // Back-date the clock by the old duration so a continued recording picks up where it ended.
+    this.t0 = performance.now() - (this.base?.duration || 0);
     // Change offsets are only meaningful against one fixed line ending, so pin it before capturing anything.
     this.editor.getModel()?.setEOL(0); // 0 = EndOfLineSequence.LF
-    this.initialCode = this.editor.getValue();
-    this.events = [];
+    this.initialCode = this.base ? this.base.initialCode : this.editor.getValue();
+    this.events = this.base ? [...this.base.events] : [];
     const pos = this.editor.getPosition();
-    if (pos) this.events.push({ t: 0, k: 'c', p: [pos.lineNumber, pos.column] });
+    if (pos) this.events.push({ t: this.now(), k: 'c', p: [pos.lineNumber, pos.column] });
 
     this.subs.push(
       this.editor.onDidChangeModelContent((e) => {
+        if (this.pausedAt !== null) return;
         this.events.push({ t: this.now(), k: 'e', c: e.changes.map((ch) => [ch.rangeOffset, ch.rangeLength, ch.text]) });
       }),
       this.editor.onDidChangeCursorPosition((e) => {
+        if (this.pausedAt !== null) return;
         const last = this.events.at(-1);
         const p = [e.position.lineNumber, e.position.column];
         if (last?.k === 'c' && last.p[0] === p[0] && last.p[1] === p[1]) return;
@@ -51,7 +57,19 @@ export class LessonRecorder {
     );
   }
 
+  // Paused time is cut out of the lesson: the clock stops and nothing is captured until resume().
+  pause() {
+    if (this.pausedAt === null) this.pausedAt = performance.now();
+  }
+
+  resume() {
+    if (this.pausedAt === null) return;
+    this.t0 += performance.now() - this.pausedAt;
+    this.pausedAt = null;
+  }
+
   markRun(lines, isError) {
+    if (this.pausedAt !== null) return;
     this.events.push({ t: this.now(), k: 'r', o: lines.slice(0, 200), x: !!isError });
   }
 

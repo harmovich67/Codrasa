@@ -13,7 +13,10 @@ export const LANGUAGES = [
   { id: 'markdown', label: 'Markdown' },
 ];
 
-export const langInfo = (id) => LANGUAGES.find((l) => l.id === id) || { id, label: id };
+// Lessons of a whiteboard subject (math, physics…) have no programming language: they are recorded on a board.
+export const BOARD_LANGUAGE = { id: 'board', label: 'سبورة' };
+
+export const langInfo = (id) => (id === 'board' ? BOARD_LANGUAGE : LANGUAGES.find((l) => l.id === id) || { id, label: id });
 
 export const STARTERS = {
   javascript: "// اكتب الكود هنا واضغط Ctrl+Enter للتشغيل\nconsole.log('أهلًا من Codrasa!');\n",

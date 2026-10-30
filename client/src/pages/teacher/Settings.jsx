@@ -4,6 +4,7 @@ import { api } from '../../lib/api.js';
 import { useAuth } from '../../store/auth.js';
 import { toast } from '../../store/toast.js';
 import { Badge, Button, Card, Field, Input, PageHeader, PageLoader, Toggle } from '../../components/ui.jsx';
+import SubjectsCard from './SubjectsCard.jsx';
 
 export default function Settings() {
   const refreshPlatform = useAuth((s) => s.refreshPlatform);
@@ -83,6 +84,16 @@ export default function Settings() {
             onChange={(v) => set('allow_registration', v ? '1' : '0')}
             label="السماح للطلاب بإنشاء حسابات بنفسهم"
           />
+          <div>
+            <Toggle
+              checked={s.questions_enabled === '1'}
+              onChange={(v) => set('questions_enabled', v ? '1' : '0')}
+              label="الأسئلة التفاعلية (الدرس بيقف لحد ما الطالب يجاوب)"
+            />
+            <p className="mt-1.5 mr-12 text-xs leading-6 text-muted">
+              لما تتقفل، الطلاب مبيشوفوش أي أسئلة داخل الدروس (والأسئلة بتفضل محفوظة). تقدر تفعّلها أو توقفها لدرس معين من تاب «المحتوى» في استوديو الدرس.
+            </p>
+          </div>
         </Card>
 
         <Card className="space-y-4 p-5">
@@ -134,6 +145,8 @@ export default function Settings() {
             <Toggle checked={s.student_smart === '1'} onChange={(v) => set('student_smart', v ? '1' : '0')} label="السماح للطلاب باستخدام الموديل الأذكى (أغلى)" />
           </div>
         </Card>
+
+        <SubjectsCard />
       </div>
     </>
   );

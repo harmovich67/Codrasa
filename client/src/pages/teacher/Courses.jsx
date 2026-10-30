@@ -62,6 +62,7 @@ export default function Courses() {
                     <h3 className="font-semibold group-hover:text-brand">{c.title}</h3>
                     {c.published ? <Badge color="mint">منشور</Badge> : <Badge>مسودة</Badge>}
                   </div>
+                  {c.subject_name && <Badge color={c.subject_kind === 'board' ? 'amber' : 'brand'}>{c.subject_name}</Badge>}
                   {c.description && <p className="line-clamp-2 text-sm text-muted">{c.description}</p>}
                   <div className="flex flex-wrap gap-4 pt-1 text-xs text-muted">
                     <span className="inline-flex items-center gap-1.5">

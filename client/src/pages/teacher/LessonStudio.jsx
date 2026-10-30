@@ -1,13 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
-import fixWebmDuration from 'fix-webm-duration';
 import {
   ArrowRight,
-  Circle,
-  Square,
-  X,
-  Mic,
-  MicOff,
   Terminal,
   Eye,
   Save,
@@ -24,10 +18,14 @@ import {
 } from 'lucide-react';
 import { api } from '../../lib/api.js';
 import { LessonRecorder, createTimeline } from '../../lib/recording.js';
+import { useStudioSession } from './useStudioSession.js';
+import { Prompter, RecorderBar, useLiveQuestion } from './StudioParts.jsx';
+import BoardRecorderTab from './BoardStudio.jsx';
 import { runCode } from '../../lib/runner.js';
 import { fmtTime } from '../../lib/format.js';
 import { HINTS, LANGUAGES, STARTERS, langInfo } from '../../lib/languages.js';
 import { toast } from '../../store/toast.js';
+import { useAuth } from '../../store/auth.js';
 import CodeEditor from '../../components/CodeEditor.jsx';
 import OutputPanel from '../../components/OutputPanel.jsx';
 import StuckMap from '../../components/StuckMap.jsx';
@@ -59,6 +57,7 @@ function Studio({ lesson, reload }) {
     published: !!lesson.published,
     language: lesson.language,
     ai_mode: lesson.ai_mode || '',
+    questions_mode: lesson.questions_mode || '',
   });
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -124,11 +123,16 @@ function Studio({ lesson, reload }) {
       />
 
       <div className={tab === 'record' ? '' : 'hidden'}>
-        <Recorder lesson={lesson} form={form} set={set} reload={reload} />
+        {lesson.kind === 'board' ? (
+          <BoardRecorderTab lesson={lesson} form={form} set={set} reload={reload} />
+        ) : (
+          <Recorder lesson={lesson} form={form} set={set} reload={reload} />
+        )}
       </div>
       {tab === 'content' && <ContentTab lesson={lesson} form={form} set={set} saveMeta={saveMeta} />}
       <div className={tab === 'challenges' ? '' : 'hidden'}>
-        <CheckpointEditor lesson={lesson} draftRequest={draftRequest} />
+        {/* remounts when questions are added while recording, so the list shows them */}
+        <CheckpointEditor key={(lesson.checkpoints || []).map((c) => c.id).join()} lesson={lesson} draftRequest={draftRequest} />
       </div>
       {tab === 'quiz' && <QuizEditor lesson={lesson} saveMeta={saveMeta} dirty={dirty} />}
       {tab === 'stuck' && (
@@ -147,166 +151,55 @@ function Studio({ lesson, reload }) {
   );
 }
 
-function pickMime() {
-  if (typeof MediaRecorder === 'undefined') return null;
-  return ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'].find((m) => MediaRecorder.isTypeSupported(m)) || '';
-}
-
 function Recorder({ lesson, form, set, reload }) {
   const existing = useMemo(() => (lesson.recording ? createTimeline(lesson.recording) : null), [lesson.recording]);
   const info = langInfo(form.language);
   const editorRef = useRef(null);
-  const recorderRef = useRef(null);
-  const mediaRef = useRef(null);
-  const [state, setState] = useState('idle'); // idle | starting | recording | saving
-  const stateRef = useRef(state);
-  stateRef.current = state;
-  const [elapsed, setElapsed] = useState(0);
-  const [withMic, setWithMic] = useState(true);
   const [prompter, setPrompter] = useState(true);
   const [output, setOutput] = useState(null);
   const [code, setCode] = useState(() => existing?.finalCode ?? STARTERS[form.language] ?? '');
 
-  useEffect(() => {
-    if (state !== 'recording') return undefined;
-    const iv = setInterval(() => setElapsed(recorderRef.current.now()), 250);
-    return () => clearInterval(iv);
-  }, [state]);
+  const session = useStudioSession({
+    lesson,
+    language: form.language,
+    reload,
+    createRecorder: (base) => {
+      const editor = editorRef.current;
+      // Continuing: the editor must hold exactly what the recording ended with.
+      if (base) editor.setValue(existing.finalCode.replaceAll('\r\n', '\n'));
+      setOutput(null);
+      return new LessonRecorder(editor, form.language, base);
+    },
+    onStarted: () => editorRef.current?.focus(),
+  });
+  const question = useLiveQuestion(session, lesson);
+  const live = session.state === 'recording' || session.state === 'paused';
+  const busy = session.state === 'starting' || session.state === 'saving';
+  const canContinue = !existing || lesson.recording.language === form.language;
 
-  // Release the mic if the page closes mid-recording.
+  // While paused nothing is captured, so the editor is locked too.
   useEffect(() => {
-    return () => {
-      mediaRef.current?.stream.getTracks().forEach((t) => t.stop());
-    };
-  }, []);
+    editorRef.current?.updateOptions({ readOnly: session.state === 'paused' });
+  }, [session.state]);
 
   async function run() {
     if (!langInfo(form.language).runnable) return;
     const res = await runCode(form.language, editorRef.current.getValue().replaceAll('\r\n', '\n'));
     setOutput(res);
-    if (stateRef.current === 'recording') recorderRef.current.markRun(res.lines, res.error);
+    if (session.state === 'recording') session.recorder.current.markRun(res.lines, res.error);
   }
   const runRef = useRef(run);
   runRef.current = run;
-
-  function begin() {
-    setOutput(null);
-    setElapsed(0);
-    setState('recording');
-    editorRef.current.focus();
-  }
-
-  async function start() {
-    if (lesson.recording && !window.confirm('التسجيل الجديد هيستبدل التسجيل الحالي للدرس. نكمل؟')) return;
-    setState('starting');
-    const recorder = new LessonRecorder(editorRef.current, form.language);
-    recorderRef.current = recorder;
-    if (!withMic) {
-      recorder.start();
-      return begin();
-    }
-    let stream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
-    } catch {
-      toast.error('مقدرناش نوصل للمايك — اسمح للمتصفح بالوصول أو سجّل بدون صوت');
-      return setState('idle');
-    }
-    const mime = pickMime();
-    const mr = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
-    const chunks = [];
-    mr.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-    // Start the code clock exactly when audio capture starts so both tracks line up.
-    mr.onstart = () => {
-      recorder.start();
-      begin();
-    };
-    mediaRef.current = { mr, stream, chunks };
-    mr.start(1000);
-  }
-
-  function stopMedia() {
-    const m = mediaRef.current;
-    mediaRef.current = null;
-    if (!m) return Promise.resolve(null);
-    return new Promise((resolve) => {
-      m.mr.onstop = () => {
-        m.stream.getTracks().forEach((t) => t.stop());
-        resolve(new Blob(m.chunks, { type: m.mr.mimeType || 'audio/webm' }));
-      };
-      m.mr.stop();
-    });
-  }
-
-  async function stop() {
-    const recording = recorderRef.current.stop();
-    setState('saving');
-    try {
-      let blob = await stopMedia();
-      if (recording.duration < 1500) {
-        toast.error('التسجيل أقصر من ثانية ونص — متحفظش');
-        return;
-      }
-      await api.put(`/lessons/${lesson.id}`, { recording, language: form.language });
-      if (blob?.size) {
-        if (blob.type.includes('webm')) {
-          // Chrome's MediaRecorder writes WebM without a duration, which breaks seeking.
-          blob = await fixWebmDuration(blob, recording.duration, { logger: false }).catch(() => blob);
-        }
-        const fd = new FormData();
-        fd.append('audio', blob, 'voice.webm');
-        await api.upload(`/lessons/${lesson.id}/audio`, fd);
-      }
-      toast.success(`اتحفظ التسجيل (${fmtTime(recording.duration)}) ✓`);
-      await reload();
-    } catch (err) {
-      toast.error(err);
-    } finally {
-      setState('idle');
-    }
-  }
-
-  async function cancel() {
-    recorderRef.current?.stop();
-    await stopMedia();
-    setState('idle');
-    toast.info('اتلغى التسجيل');
-  }
 
   const onMount = (editor, monaco) => {
     editorRef.current = editor;
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => runRef.current());
   };
 
-  const recording = state === 'recording';
-  const busy = state === 'starting' || state === 'saving';
-
   return (
     <div className="space-y-3">
-      <Card className="flex flex-wrap items-center gap-3 p-3">
-        {recording ? (
-          <>
-            <Badge color="rose" className="px-3 py-1.5 text-sm">
-              <span className="rec-dot size-2 rounded-full bg-rose" /> REC <span className="font-mono">{fmtTime(elapsed)}</span>
-            </Badge>
-            <Button variant="danger" icon={Square} onClick={stop}>
-              إيقاف وحفظ
-            </Button>
-            <Button variant="ghost" icon={X} onClick={cancel}>
-              إلغاء
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button variant="rec" icon={Circle} onClick={start} loading={busy}>
-              {state === 'saving' ? 'بيتحفظ…' : 'ابدأ التسجيل'}
-            </Button>
-            <Button variant="subtle" size="sm" icon={withMic ? Mic : MicOff} onClick={() => setWithMic(!withMic)} disabled={busy}>
-              {withMic ? 'بالصوت' : 'بدون صوت'}
-            </Button>
-          </>
-        )}
-        <Select value={form.language} onChange={(e) => set('language', e.target.value)} disabled={recording || busy} className="w-36">
+      <RecorderBar session={session} lesson={lesson} canContinue={canContinue} onAsk={question.ask}>
+        <Select value={form.language} onChange={(e) => set('language', e.target.value)} disabled={live || busy} className="w-36">
           {LANGUAGES.map((l) => (
             <option key={l.id} value={l.id}>
               {l.label}
@@ -315,33 +208,34 @@ function Recorder({ lesson, form, set, reload }) {
         </Select>
         <div className="flex-1" />
         {info.runnable && (
-          <Button variant="mint" size="sm" icon={Terminal} onClick={run} title="Ctrl+Enter">
+          <Button variant="mint" size="sm" icon={Terminal} onClick={run} title="Ctrl+Enter" disabled={session.state === 'paused'}>
             شغّل
           </Button>
         )}
         <IconButton
           icon={Eraser}
           title="تفريغ المحرر"
-          disabled={recording}
+          disabled={live}
           onClick={() => {
             editorRef.current?.setValue('');
             setOutput(null);
           }}
         />
         <IconButton icon={StickyNote} title="التلقين (Teleprompter)" active={prompter} onClick={() => setPrompter(!prompter)} />
-      </Card>
+      </RecorderBar>
+      {question.dialog}
 
-      {!recording && (
+      {!live && (
         <p className="text-xs leading-6 text-muted">
           {existing ? (
             <>
-              التسجيل الحالي: <b className="font-mono text-ink">{fmtTime(existing.duration)}</b> · {lesson.audio_url ? 'بالصوت' : 'بدون صوت'} ·{' '}
-              {lesson.recording.events.length} حدث.{' '}
+              التسجيل الحالي: <b className="font-mono text-ink">{fmtTime(existing.duration)}</b> · {lesson.audio_parts?.length ? 'بالصوت' : 'بدون صوت'} · {lesson.recording.events.length} حدث. «كمّل» بيضيف على آخره
+              (المحرر هيرجع لآخر كود)، و«تسجيل جديد» بيستبدله.{' '}
             </>
           ) : (
             'الدرس ده لسه متسجلش. '
           )}
-          اللي في المحرر دلوقتي هيبقى نقطة البداية للتسجيل. كل ضغطة زرار وحركة مؤشر وتشغيل كود بيتسجلوا مع صوتك — مش فيديو.
+          اللي في المحرر دلوقتي هو نقطة البداية. كل ضغطة زرار وحركة مؤشر وتشغيل كود بيتسجلوا مع صوتك — مش فيديو. «وقفة» بتوقف التسجيل والصوت مؤقتًا من غير فجوة، و«سؤال للطلاب» بيحط سؤال بيوقف الدرس عند اللحظة دي.
         </p>
       )}
 
@@ -353,7 +247,12 @@ function Recorder({ lesson, form, set, reload }) {
 
       <div className="flex flex-col gap-3 lg:flex-row">
         <div className="flex min-w-0 flex-1 flex-col gap-3">
-          <div className={cx('h-[50dvh] overflow-hidden rounded-2xl border shadow-card lg:h-[58vh]', recording ? 'border-rose/60 shadow-[0_0_0_3px] shadow-rose/15' : 'border-line')}>
+          <div
+            className={cx(
+              'h-[50dvh] overflow-hidden rounded-2xl border shadow-card lg:h-[58vh]',
+              session.state === 'recording' ? 'border-rose/60 shadow-[0_0_0_3px] shadow-rose/15' : session.state === 'paused' ? 'border-amber/60' : 'border-line',
+            )}
+          >
             <CodeEditor language={form.language} defaultValue={code} onMount={onMount} onChange={setCode} />
           </div>
           {info.preview ? (
@@ -362,20 +261,7 @@ function Recorder({ lesson, form, set, reload }) {
             <OutputPanel lines={output?.lines} ms={output?.ms} className="h-36" empty={info.runnable ? undefined : `التشغيل مش مدعوم لـ ${info.label} — الطلاب هيشوفوا الكود بس`} />
           )}
         </div>
-        {prompter && (
-          <Card className="flex w-full flex-col lg:w-80">
-            <div className="flex items-center gap-2 border-b border-line px-4 py-3 text-sm font-medium">
-              <StickyNote className="size-4 text-amber" /> التلقين
-              <span className="text-xs font-normal text-muted">(سكريبتك — الطلاب مش بيشوفوه)</span>
-            </div>
-            <textarea
-              value={form.notes}
-              onChange={(e) => set('notes', e.target.value)}
-              placeholder={'اكتب نقاط الشرح هنا…\n\n1. نعرّف المتغير\n2. نوضح الفرق بين let و const\n3. مثال عملي'}
-              className="min-h-64 flex-1 resize-none bg-transparent p-4 text-lg leading-9 outline-none placeholder:text-muted/40"
-            />
-          </Card>
-        )}
+        {prompter && <Prompter value={form.notes} onChange={(v) => set('notes', v)} />}
       </div>
     </div>
   );
@@ -405,6 +291,7 @@ const DRAFTS = {
 };
 
 function ContentTab({ lesson, form, set, saveMeta }) {
+  const platform = useAuth((s) => s.platform);
   const [generating, setGenerating] = useState(null); // which draft is being written
   const [preview, setPreview] = useState(false);
 
@@ -434,6 +321,16 @@ function ContentTab({ lesson, form, set, saveMeta }) {
             <option value="">الافتراضي (حسب الإعدادات)</option>
             <option value="on">ظاهر للطلاب</option>
             <option value="off">مخفي عن الطلاب</option>
+          </Select>
+        </Field>
+        <Field
+          label="الأسئلة التفاعلية في الدرس ده"
+          hint={`الدرس بيقف عند السؤال لحد ما الطالب يجاوب (وممكن يطلب تلميح). الافتراضي بيتبع إعدادات المنصة (حاليًا: ${platform.questions_enabled ? 'مفعّلة' : 'متوقفة'}). «متوقفة» بتخفي الأسئلة عن الطلاب في الدرس ده من غير ما تتمسح.`}
+        >
+          <Select value={form.questions_mode} onChange={(e) => set('questions_mode', e.target.value)}>
+            <option value="">الافتراضي (حسب الإعدادات)</option>
+            <option value="on">مفعّلة</option>
+            <option value="off">متوقفة</option>
           </Select>
         </Field>
         <AiField label="وصف الدرس (بيظهر للطلاب)" onGenerate={() => generate('description')} busy={generating === 'description'} disabled={!!generating}>
