@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, Outlet } from 'react-router';
 import { useAuth } from './store/auth.js';
 import { Toaster, Spinner } from './components/ui.jsx';
 import Layout from './components/Layout.jsx';
+import Splash from './components/Splash.jsx';
 import Login from './pages/Login.jsx';
 import Setup from './pages/Setup.jsx';
 import LessonPlayer from './pages/LessonPlayer.jsx';
@@ -44,16 +45,21 @@ export default function App() {
     init();
   }, [init]);
 
+  // <Splash /> stays the first child in both states so it isn't remounted when `ready` flips.
   if (!ready) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <Spinner className="size-8" />
-      </div>
+      <>
+        <Splash />
+        <div className="flex h-full items-center justify-center">
+          <Spinner className="size-8" />
+        </div>
+      </>
     );
   }
 
   return (
     <>
+      <Splash />
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
         <Route path="/setup" element={user ? <Navigate to="/" replace /> : <Setup />} />

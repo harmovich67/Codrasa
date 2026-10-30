@@ -110,6 +110,79 @@ body {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+/* ---------- Phone splash ---------- */
+.sp-root {
+  background:
+    radial-gradient(520px 420px at 85% 8%, #8f74ff 0%, transparent 60%),
+    linear-gradient(165deg, #2a1c86 0%, #5a3df0 52%, #7b5cff 100%);
+  transition: opacity 0.55s ease, transform 0.55s ease;
+}
+.sp-root.sp-out {
+  opacity: 0;
+  transform: scale(1.06);
+  pointer-events: none;
+}
+.sp-orb {
+  animation: sp-drift 6s ease-in-out infinite alternate;
+}
+@keyframes sp-drift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(18px, -24px, 0) scale(1.12); }
+}
+.sp-ring {
+  animation: sp-ring 2.2s ease-out infinite;
+}
+@keyframes sp-ring {
+  0% { transform: scale(0.8); opacity: 0.6; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+.sp-logo {
+  animation: sp-pop 0.85s cubic-bezier(0.2, 1.4, 0.4, 1) 0.1s both;
+}
+@keyframes sp-pop {
+  from { transform: scale(0.3) rotate(-14deg); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.sp-rise {
+  animation: sp-rise 0.6s ease-out both;
+}
+@keyframes sp-rise {
+  from { transform: translateY(14px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+/* 14 characters: "lesson.play();" */
+.sp-type {
+  width: 14ch;
+  overflow: hidden;
+  white-space: nowrap;
+  animation: sp-type 0.9s steps(14) 1s both;
+}
+@keyframes sp-type {
+  from { width: 0; }
+  to { width: 14ch; }
+}
+.sp-caret {
+  animation: sp-blink 0.8s steps(1) infinite;
+}
+@keyframes sp-blink {
+  50% { opacity: 0; }
+}
+.sp-step {
+  animation: sp-step 0.5s cubic-bezier(0.2, 1.5, 0.4, 1) both;
+}
+@keyframes sp-step {
+  from { transform: scale(0.5) translateY(8px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.sp-bar {
+  width: 0;
+  animation: sp-bar var(--sp-ms, 2.4s) cubic-bezier(0.45, 0.1, 0.3, 1) both;
+}
+@keyframes sp-bar {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
 @keyframes toast-shake {
   0% { opacity: 0; transform: translateY(8px); }
   30% { opacity: 1; transform: none; }
