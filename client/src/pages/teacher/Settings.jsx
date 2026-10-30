@@ -75,6 +75,9 @@ export default function Settings() {
           <Field label="العملة">
             <Input value={s.currency} onChange={(e) => set('currency', e.target.value)} className="w-32" />
           </Field>
+          <Field label="رقم فودافون كاش / إنستاباي (الطلاب بيحوّلوا عليه)">
+            <Input value={s.payment_phone} onChange={(e) => set('payment_phone', e.target.value)} dir="ltr" className="w-56" />
+          </Field>
           <Toggle
             checked={s.allow_registration === '1'}
             onChange={(v) => set('allow_registration', v ? '1' : '0')}

@@ -110,6 +110,17 @@ body {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+@keyframes toast-shake {
+  0% { opacity: 0; transform: translateY(8px); }
+  30% { opacity: 1; transform: none; }
+  45% { transform: translateX(-6px); }
+  60% { transform: translateX(5px); }
+  75% { transform: translateX(-3px); }
+  90%, 100% { transform: none; }
+}
+.toast-shake {
+  animation: toast-shake 0.5s ease-out both;
+}
 
 /* ---------- Hero banner illustration ---------- */
 /* One 8s "lesson" loop: code types in, the play-head runs, a challenge pops, then it restarts. */

@@ -7,7 +7,8 @@ r.use(requireAuth, requireTeacher);
 
 r.get('/', (req, res) => {
   const stats = get(`SELECT
-    (SELECT COUNT(*) FROM users WHERE role = 'student') AS students,
+    (SELECT COUNT(*) FROM users WHERE role = 'student' AND status = 'active') AS students,
+    (SELECT COUNT(*) FROM users WHERE role = 'student' AND status = 'pending') AS pending_students,
     (SELECT COUNT(*) FROM courses) AS courses,
     (SELECT COUNT(*) FROM lessons) AS lessons,
     (SELECT COUNT(*) FROM questions WHERE answer IS NULL) AS pending_questions,

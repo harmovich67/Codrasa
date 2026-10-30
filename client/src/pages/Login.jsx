@@ -12,6 +12,7 @@ export default function Login() {
   const [mode, setMode] = useState('login');
   const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState(false);
 
   useEffect(() => {
     api.get('/auth/setup-needed').then(({ needed }) => needed && navigate('/setup', { replace: true })).catch(() => {});
@@ -23,7 +24,13 @@ export default function Login() {
     e.preventDefault();
     setBusy(true);
     try {
-      await authenticate(mode === 'login' ? '/auth/login' : '/auth/register', form);
+      const result = await authenticate(mode === 'login' ? '/auth/login' : '/auth/register', form);
+      if (result?.pending) {
+        setPending(true);
+        setMode('login');
+        setForm((f) => ({ ...f, password: '' }));
+        return;
+      }
       navigate('/', { replace: true });
     } catch (err) {
       toast.error(err);
@@ -48,6 +55,11 @@ export default function Login() {
             { id: 'register', label: 'حساب جديد' },
           ]}
         />
+      )}
+      {pending && (
+        <p className="mb-4 rounded-xl border border-mint/30 bg-mint/10 p-3 text-sm text-mint">
+          اتعمل حسابك ✓ — مستني موافقة المدرّس، وأول ما يوافق تقدر تسجّل دخولك من هنا.
+        </p>
       )}
       <form onSubmit={submit} className="space-y-4">
         {mode === 'register' && (

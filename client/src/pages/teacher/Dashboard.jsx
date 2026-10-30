@@ -61,6 +61,15 @@ export default function Dashboard() {
         ]}
       />
 
+      {s.pending_students > 0 && (
+        <Link to="/requests" className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-brand/40 bg-brand/10 px-5 py-3 text-sm transition hover:bg-brand/15">
+          <span>
+            🙋 عندك <b>{s.pending_students}</b> طالب جديد مستني موافقتك على التسجيل
+          </span>
+          <span className="text-brand">راجعهم ←</span>
+        </Link>
+      )}
+
       {s.pending_requests > 0 && (
         <Link to="/requests" className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-brand/40 bg-brand/10 px-5 py-3 text-sm transition hover:bg-brand/15">
           <span>

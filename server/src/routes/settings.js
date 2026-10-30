@@ -9,6 +9,8 @@ const DEFAULTS = {
   platform_name: 'Codrasa',
   allow_registration: '1',
   currency: 'ج.م',
+  // Vodafone Cash / InstaPay number students transfer course fees to.
+  payment_phone: '+201022596130',
   smart_model: DEFAULT_MODELS.smart,
   fast_model: DEFAULT_MODELS.fast,
   ai_daily_limit: '30',
@@ -24,6 +26,7 @@ r.get('/public', (req, res) => {
     platform_name: s.platform_name,
     allow_registration: s.allow_registration === '1',
     currency: s.currency,
+    payment_phone: s.payment_phone,
     student_smart: s.student_smart === '1',
     student_ai: s.student_ai === '1',
   });

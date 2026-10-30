@@ -14,7 +14,7 @@ function Decide({ request, mode, onClose, onDone }) {
   const approve = mode === 'approve';
   const [record, setRecord] = useState(request.course_price > 0);
   const [amount, setAmount] = useState(request.course_price || '');
-  const [method, setMethod] = useState(METHODS[0]);
+  const [method, setMethod] = useState(request.payment_method || METHODS[0]);
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -50,6 +50,11 @@ function Decide({ request, mode, onClose, onDone }) {
       <p className="text-sm text-muted">
         {request.student_name} — {request.course_title}
       </p>
+      {approve && request.payment_method && (
+        <p className="rounded-lg bg-amber/10 p-3 text-sm text-amber">
+          اتأكد إن التحويل وصلك على {request.payment_method} من <b dir="ltr">{request.payment_ref}</b> قبل ما تقبل.
+        </p>
+      )}
       {approve && (
         <>
           <Toggle checked={record} onChange={setRecord} label="سجّل دفعة مع القبول" />
@@ -76,6 +81,69 @@ function Decide({ request, mode, onClose, onDone }) {
   );
 }
 
+// Self-registered students can't log in until the teacher approves them here.
+function PendingStudents() {
+  const [students, setStudents] = useState([]);
+  const [busy, setBusy] = useState(null);
+
+  const load = useCallback(() => api.get('/students/pending').then(setStudents).catch(toast.error), []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function decide(student, action) {
+    if (action === 'reject' && !window.confirm(`رفض تسجيل ${student.name}؟ الحساب هيتمسح.`)) return;
+    setBusy(student.id);
+    try {
+      await api.post(`/students/${student.id}/${action}`);
+      toast.success(action === 'approve' ? `اتفعّل حساب ${student.name} ✓` : 'اترفض التسجيل');
+      await load();
+    } catch (err) {
+      toast.error(err);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (students.length === 0) return null;
+  return (
+    <section className="mb-6">
+      <h2 className="mb-3 font-semibold">طلبات تسجيل جديدة ({students.length})</h2>
+      <div className="space-y-3">
+        {students.map((s) => (
+          <Card key={s.id} className="flex flex-wrap items-center justify-between gap-4 p-5">
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold">{s.name}</span>
+                <Badge color="amber">مستني الموافقة</Badge>
+                <span className="text-xs text-muted">{fmtRelative(s.created_at)}</span>
+              </div>
+              <div className="flex flex-wrap gap-4 text-xs text-muted" dir="ltr">
+                <span className="inline-flex items-center gap-1">
+                  <Mail className="size-3.5" /> {s.email}
+                </span>
+                {s.phone && (
+                  <span className="inline-flex items-center gap-1">
+                    <Phone className="size-3.5" /> {s.phone}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button icon={Check} loading={busy === s.id} onClick={() => decide(s, 'approve')}>
+                قبول
+              </Button>
+              <Button variant="danger" icon={X} disabled={busy === s.id} onClick={() => decide(s, 'reject')}>
+                رفض
+              </Button>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default function Requests() {
   const [status, setStatus] = useState('pending');
   const [items, setItems] = useState(null);
@@ -90,7 +158,9 @@ export default function Requests() {
 
   return (
     <>
-      <PageHeader title="طلبات الاشتراك" subtitle="الطلاب بيطلبوا الكورسات المدفوعة من هنا، وانت بتقبل وتفعّل أو ترفض." />
+      <PageHeader title="طلبات الاشتراك" subtitle="الطلاب الجدد بيستنوا موافقتك على التسجيل، وبيطلبوا الكورسات المدفوعة من هنا." />
+      <PendingStudents />
+      <h2 className="mb-3 font-semibold">طلبات الكورسات</h2>
       <Tabs
         className="mb-5 w-fit"
         value={status}
@@ -132,6 +202,15 @@ export default function Requests() {
                     </a>
                   )}
                 </div>
+                {r.payment_method && (
+                  <p className="flex flex-wrap items-center gap-2 text-sm">
+                    <Badge color="amber">{r.payment_method}</Badge>
+                    <span className="text-muted">حوّل من</span>
+                    <span className="font-mono font-semibold" dir="ltr">
+                      {r.payment_ref}
+                    </span>
+                  </p>
+                )}
                 {r.message && <p className="rounded-lg bg-panel-2 p-3 text-sm whitespace-pre-wrap">{r.message}</p>}
                 {r.reply && <p className="text-xs text-muted">ردك: {r.reply}</p>}
               </div>

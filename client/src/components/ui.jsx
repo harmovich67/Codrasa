@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Loader2, X, CircleCheck, CircleAlert, Info } from 'lucide-react';
 import { useToasts } from '../store/toast.js';
 
@@ -106,7 +107,8 @@ export function Modal({ open, onClose, title, children, footer, wide }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
   if (!open) return null;
-  return (
+  // Portal to <body>: the page wrapper's transform animation would otherwise trap `fixed` inside it.
+  return createPortal(
     <div
       className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-sm animate-fade p-0 sm:p-4"
       onMouseDown={onClose}
@@ -133,7 +135,8 @@ export function Modal({ open, onClose, title, children, footer, wide }) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -224,6 +227,12 @@ export function ProgressBar({ value, className, color = 'bg-mint' }) {
 
 const TOAST_ICON = { success: CircleCheck, error: CircleAlert, info: Info };
 const TOAST_TONE = { success: 'text-mint', error: 'text-rose', info: 'text-brand' };
+// Errors stand out: tinted card, accent edge, a title and a short shake.
+const TOAST_BOX = {
+  success: 'border-line bg-panel animate-page',
+  info: 'border-line bg-panel animate-page',
+  error: 'toast-shake border-rose/40 border-r-4 border-r-rose bg-[#fff1f3] shadow-rose/20',
+};
 
 export function Toaster() {
   const { items, dismiss } = useToasts();
@@ -235,10 +244,24 @@ export function Toaster() {
           <div
             key={t.id}
             onClick={() => dismiss(t.id)}
-            className="pointer-events-auto flex animate-page cursor-pointer items-start gap-3 rounded-2xl border border-line bg-panel p-3.5 text-sm shadow-float"
+            role={t.type === 'error' ? 'alert' : 'status'}
+            className={cx('pointer-events-auto flex cursor-pointer items-start gap-3 rounded-2xl border p-3.5 text-sm shadow-float', TOAST_BOX[t.type])}
           >
-            <Icon className={cx('mt-0.5 size-4.5 shrink-0', TOAST_TONE[t.type])} />
-            <span className="leading-relaxed">{t.message}</span>
+            {t.type === 'error' ? (
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-rose text-white">
+                <Icon className="size-4.5" />
+              </span>
+            ) : (
+              <Icon className={cx('mt-0.5 size-4.5 shrink-0', TOAST_TONE[t.type])} />
+            )}
+            {t.type === 'error' ? (
+              <span className="min-w-0 leading-relaxed">
+                <b className="block text-rose">حصلت مشكلة</b>
+                <span className="text-ink">{t.message}</span>
+              </span>
+            ) : (
+              <span className="leading-relaxed">{t.message}</span>
+            )}
           </div>
         );
       })}

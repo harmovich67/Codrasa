@@ -25,8 +25,9 @@ r.post('/setup', (req, res) => {
 
 r.post('/register', (req, res) => {
   if (getSetting('allow_registration', '1') !== '1') throw httpError(403, 'التسجيل مغلق حاليًا — تواصل مع المدرّس');
-  const user = createUser({ ...req.body, role: 'student' });
-  res.json({ token: signToken(user), user: publicUser(user) });
+  // New students wait for the teacher's approval before they can log in.
+  createUser({ ...req.body, role: 'student' }, { status: 'pending' });
+  res.json({ pending: true });
 });
 
 r.post('/login', async (req, res) => {
@@ -39,6 +40,7 @@ r.post('/login', async (req, res) => {
   if (!user || !checkPassword(req.body.password, user.password_hash)) {
     throw httpError(401, 'البريد أو كلمة المرور غير صحيحة');
   }
+  if (user.status === 'pending') throw httpError(403, 'حسابك مستني موافقة المدرّس — هتقدر تدخل أول ما يوافق');
   res.json({ token: signToken(user), user: publicUser(user) });
 });
 

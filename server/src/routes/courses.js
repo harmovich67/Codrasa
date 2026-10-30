@@ -7,6 +7,8 @@ import { httpError, toInt } from '../utils.js';
 const r = Router();
 r.use(requireAuth);
 
+const PAYMENT_METHODS = ['فودافون كاش', 'إنستاباي'];
+
 const LESSON_LIST_COLUMNS = `id, title, position, published, duration_ms, language, description,
   (recording IS NOT NULL) AS has_recording, (quiz IS NOT NULL) AS has_quiz`;
 
@@ -111,7 +113,23 @@ r.post('/:id/request', (req, res) => {
   if (get("SELECT id FROM enrollment_requests WHERE user_id = ? AND course_id = ? AND status = 'pending'", req.user.id, course.id)) {
     throw httpError(409, 'طلبك قيد المراجعة بالفعل');
   }
-  run('INSERT INTO enrollment_requests (user_id, course_id, message) VALUES (?, ?, ?)', req.user.id, course.id, String(req.body.message || '').trim().slice(0, 1000) || null);
+  // Paid courses: the student must say which wallet they used and the number they sent from (or the transaction ref).
+  let method = null;
+  let ref = null;
+  if (course.price > 0) {
+    method = String(req.body.paymentMethod || '');
+    ref = String(req.body.paymentRef || '').trim().slice(0, 100);
+    if (!PAYMENT_METHODS.includes(method)) throw httpError(400, 'اختار طريقة الدفع: فودافون كاش أو إنستاباي');
+    if (!ref) throw httpError(400, 'اكتب الرقم اللي حوّلت منه أو رقم العملية');
+  }
+  run(
+    'INSERT INTO enrollment_requests (user_id, course_id, message, payment_method, payment_ref) VALUES (?, ?, ?, ?, ?)',
+    req.user.id,
+    course.id,
+    String(req.body.message || '').trim().slice(0, 1000) || null,
+    method,
+    ref,
+  );
   res.json({ ok: true });
 });
 

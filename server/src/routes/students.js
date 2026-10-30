@@ -14,8 +14,32 @@ r.get('/', (req, res) => {
       (SELECT MAX(updated_at) FROM progress pr WHERE pr.user_id = u.id) AS last_active,
       (SELECT COUNT(*) FROM progress pr WHERE pr.user_id = u.id AND pr.completed = 1) AS completed_lessons,
       (SELECT COUNT(*) FROM questions q WHERE q.user_id = u.id AND q.answer IS NULL) AS pending_questions
-    FROM users u WHERE u.role = 'student' ORDER BY u.created_at DESC`),
+    FROM users u WHERE u.role = 'student' AND u.status = 'active' ORDER BY u.created_at DESC`),
   );
+});
+
+// Self-registered students waiting for approval.
+r.get('/pending', (req, res) => {
+  res.json(all("SELECT id, name, email, phone, created_at FROM users WHERE role = 'student' AND status = 'pending' ORDER BY created_at DESC"));
+});
+
+function loadPendingStudent(id) {
+  const user = get("SELECT id, name FROM users WHERE id = ? AND role = 'student' AND status = 'pending'", id);
+  if (!user) throw httpError(404, 'طلب التسجيل غير موجود أو اتبت فيه');
+  return user;
+}
+
+r.post('/:id/approve', (req, res) => {
+  const user = loadPendingStudent(toInt(req.params.id));
+  run("UPDATE users SET status = 'active' WHERE id = ?", user.id);
+  res.json({ ok: true });
+});
+
+// Rejecting removes the account, so the same email can register again later.
+r.post('/:id/reject', (req, res) => {
+  const user = loadPendingStudent(toInt(req.params.id));
+  run('DELETE FROM users WHERE id = ?', user.id);
+  res.json({ ok: true });
 });
 
 r.post('/', (req, res) => {
@@ -25,7 +49,7 @@ r.post('/', (req, res) => {
 });
 
 function loadStudent(id) {
-  const user = get("SELECT id, name, email, phone, notes, created_at FROM users WHERE id = ? AND role = 'student'", id);
+  const user = get("SELECT id, name, email, phone, notes, created_at FROM users WHERE id = ? AND role = 'student' AND status = 'active'", id);
   if (!user) throw httpError(404, 'الطالب غير موجود');
   return user;
 }

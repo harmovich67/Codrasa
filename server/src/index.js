@@ -2,7 +2,7 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { UPLOADS_DIR, syncToCloud } from './db.js';
+import { UPLOADS_DIR, syncToCloud, refreshFromCloud } from './db.js';
 import { errorHandler } from './utils.js';
 import authRoutes from './routes/auth.js';
 import courseRoutes from './routes/courses.js';
@@ -56,6 +56,12 @@ app.use((req, res, next) => {
 });
 
 app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d' }));
+
+// Another instance (or local dev) may have pushed a newer snapshot: pull it before answering.
+app.use('/api', async (req, res, next) => {
+  await refreshFromCloud();
+  next();
+});
 
 app.use('/api/auth', authRoutes);
 app.use('/api/courses', courseRoutes);

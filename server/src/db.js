@@ -29,13 +29,28 @@ if (process.env.DATABASE_URL) {
   console.warn('[DB] DATABASE_URL not set — cloud sync disabled, using local database only.');
 }
 
+// The cloud snapshot version (its updated_at) that the local file currently matches.
+// Every Vercel instance keeps its own copy in /tmp, so each one pulls again whenever this changes.
+let localVersion = null;
+
+// Swap the database file under the open connection: close it, drop the stale WAL, reopen.
+function replaceDbFile(buf) {
+  db?.close();
+  for (const suffix of ['-wal', '-shm']) fs.rmSync(targetDb + suffix, { force: true });
+  fs.writeFileSync(targetDb, buf);
+  db = openDb();
+}
+
 export async function syncFromCloud() {
   if (!sqlClient) return false;
   try {
-    const rows = await sqlClient`SELECT db_base64 FROM codrasa_db_sync WHERE id = 1`;
-    if (rows && rows.length > 0 && rows[0].db_base64 && rows[0].db_base64.length > 100) {
-      const buf = Buffer.from(rows[0].db_base64, 'base64');
-      fs.writeFileSync(targetDb, buf);
+    const [meta] = await sqlClient`SELECT updated_at::text AS version FROM codrasa_db_sync WHERE id = 1`;
+    if (!meta || meta.version === localVersion) return false;
+    const [row] = await sqlClient`SELECT db_base64, updated_at::text AS version FROM codrasa_db_sync WHERE id = 1`;
+    if (row?.db_base64 && row.db_base64.length > 100) {
+      const buf = Buffer.from(row.db_base64, 'base64');
+      replaceDbFile(buf);
+      localVersion = row.version;
       console.log(`[DB Sync] Restored database from cloud sync (${buf.length} bytes)`);
       return true;
     }
@@ -43,6 +58,20 @@ export async function syncFromCloud() {
     console.warn('[DB Sync] Could not restore from cloud:', err.message);
   }
   return false;
+}
+
+// Pull a newer snapshot before serving a request; bursts of requests share one check.
+let lastCheck = 0;
+let inflight = null;
+export function refreshFromCloud() {
+  if (!sqlClient) return Promise.resolve(false);
+  if (inflight) return inflight;
+  if (Date.now() - lastCheck < 1500) return Promise.resolve(false);
+  lastCheck = Date.now();
+  inflight = syncFromCloud().finally(() => {
+    inflight = null;
+  });
+  return inflight;
 }
 
 export async function syncToCloud() {
@@ -53,43 +82,28 @@ export async function syncToCloud() {
     } catch {}
     const buf = fs.readFileSync(targetDb);
     const b64 = buf.toString('base64');
+    const upsert = () =>
+      sqlClient`INSERT INTO codrasa_db_sync (id, db_base64, updated_at) VALUES (1, ${b64}, CURRENT_TIMESTAMP) ON CONFLICT (id) DO UPDATE SET db_base64 = EXCLUDED.db_base64, updated_at = CURRENT_TIMESTAMP RETURNING updated_at::text AS version`;
+    let rows;
     try {
-      await sqlClient`INSERT INTO codrasa_db_sync (id, db_base64, updated_at) VALUES (1, ${b64}, CURRENT_TIMESTAMP) ON CONFLICT (id) DO UPDATE SET db_base64 = EXCLUDED.db_base64, updated_at = CURRENT_TIMESTAMP`;
+      rows = await upsert();
     } catch (e) {
       if (e.message && e.message.includes('relation "codrasa_db_sync" does not exist')) {
         await sqlClient`CREATE TABLE IF NOT EXISTS codrasa_db_sync (id INT PRIMARY KEY, db_base64 TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`;
-        await sqlClient`INSERT INTO codrasa_db_sync (id, db_base64, updated_at) VALUES (1, ${b64}, CURRENT_TIMESTAMP) ON CONFLICT (id) DO UPDATE SET db_base64 = EXCLUDED.db_base64, updated_at = CURRENT_TIMESTAMP`;
+        rows = await upsert();
       } else {
         throw e;
       }
     }
+    // Our own push is now the latest snapshot, so don't download it back.
+    localVersion = rows[0]?.version ?? localVersion;
     console.log(`[DB Sync] Persisted database to cloud sync (${buf.length} bytes)`);
   } catch (err) {
     console.error('[DB Sync] Failed to persist to cloud:', err.message);
   }
 }
 
-// 1. Try to restore latest DB from cloud snapshot
-let restored = false;
-if (sqlClient) {
-  try {
-    restored = await syncFromCloud();
-  } catch (e) {
-    console.warn('[DB Sync] Initial restore failed:', e.message);
-  }
-}
-
-// 2. If not restored, copy seed if available
-if (!restored && process.env.VERCEL && fs.existsSync(seedDb) && !fs.existsSync(targetDb)) {
-  try {
-    fs.copyFileSync(seedDb, targetDb);
-  } catch {}
-}
-
-export const db = new DatabaseSync(targetDb);
-db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
-
-db.exec(`
+const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
@@ -229,15 +243,41 @@ CREATE TABLE IF NOT EXISTS checkpoint_attempts (
   PRIMARY KEY (user_id, lesson_id, checkpoint_id, revision)
 );
 CREATE INDEX IF NOT EXISTS idx_checkpoint_attempts_lesson ON checkpoint_attempts(lesson_id);
-`);
+`;
 
-// Lightweight migrations for databases created before a column existed.
-const hasColumn = (table, column) => db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column);
-// private = hidden from the public catalogue; only students the teacher opens it for can see it.
-if (!hasColumn('courses', 'private')) db.exec('ALTER TABLE courses ADD COLUMN private INTEGER NOT NULL DEFAULT 0');
-if (!hasColumn('lessons', 'checkpoints')) db.exec('ALTER TABLE lessons ADD COLUMN checkpoints TEXT');
-// ai_mode: NULL = follow the platform setting, 'on' / 'off' = the teacher's override for this lesson's student assistant.
-if (!hasColumn('lessons', 'ai_mode')) db.exec('ALTER TABLE lessons ADD COLUMN ai_mode TEXT');
+function openDb() {
+  const conn = new DatabaseSync(targetDb);
+  conn.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+  conn.exec(SCHEMA);
+
+  // Lightweight migrations for databases created before a column existed.
+  const hasColumn = (table, column) => conn.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column);
+  // private = hidden from the public catalogue; only students the teacher opens it for can see it.
+  if (!hasColumn('courses', 'private')) conn.exec('ALTER TABLE courses ADD COLUMN private INTEGER NOT NULL DEFAULT 0');
+  if (!hasColumn('lessons', 'checkpoints')) conn.exec('ALTER TABLE lessons ADD COLUMN checkpoints TEXT');
+  // ai_mode: NULL = follow the platform setting, 'on' / 'off' = the teacher's override for this lesson's student assistant.
+  if (!hasColumn('lessons', 'ai_mode')) conn.exec('ALTER TABLE lessons ADD COLUMN ai_mode TEXT');
+  // status: 'pending' = self-registered student waiting for the teacher's approval; 'active' = can log in.
+  if (!hasColumn('users', 'status')) conn.exec("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'");
+  // How the student says they paid for a requested course, so the teacher can match the transfer.
+  if (!hasColumn('enrollment_requests', 'payment_method')) conn.exec('ALTER TABLE enrollment_requests ADD COLUMN payment_method TEXT');
+  if (!hasColumn('enrollment_requests', 'payment_ref')) conn.exec('ALTER TABLE enrollment_requests ADD COLUMN payment_ref TEXT');
+  return conn;
+}
+
+// `let` so a newer cloud snapshot can replace the connection; importers see the live binding.
+export let db;
+
+// 1. Try to restore latest DB from cloud snapshot (this also opens it)
+const restored = await syncFromCloud();
+
+// 2. If not restored, copy seed if available
+if (!restored && process.env.VERCEL && fs.existsSync(seedDb) && !fs.existsSync(targetDb)) {
+  try {
+    fs.copyFileSync(seedDb, targetDb);
+  } catch {}
+}
+if (!db) db = openDb();
 
 // node:sqlite rejects undefined and booleans, so normalize params first.
 const clean = (params) => params.map((v) => (v === undefined ? null : typeof v === 'boolean' ? Number(v) : v));

@@ -22,10 +22,11 @@ export async function requireAuth(req, res, next) {
   if (token) {
     try {
       const payload = jwt.verify(token, secret);
-      user = get('SELECT id, name, email, role, phone FROM users WHERE id = ?', payload.id);
+      const find = () => get("SELECT id, name, email, role, phone FROM users WHERE id = ? AND status = 'active'", payload.id);
+      user = find();
       if (!user) {
         await syncFromCloud();
-        user = get('SELECT id, name, email, role, phone FROM users WHERE id = ?', payload.id);
+        user = find();
       }
     } catch {
       user = null;
@@ -41,19 +42,21 @@ export function requireTeacher(req, res, next) {
   next();
 }
 
-export function createUser({ name, email, password, role, phone }) {
+// status is a separate argument so a request body spread into `fields` can never set it.
+export function createUser({ name, email, password, role, phone }, { status = 'active' } = {}) {
   if (!name?.trim()) throw httpError(400, 'الاسم مطلوب');
   if (!/^\S+@\S+\.\S+$/.test(email || '')) throw httpError(400, 'البريد الإلكتروني غير صحيح');
   if ((password || '').length < 6) throw httpError(400, 'كلمة المرور 6 أحرف على الأقل');
   const normalized = email.trim().toLowerCase();
   if (get('SELECT id FROM users WHERE email = ?', normalized)) throw httpError(409, 'البريد مستخدم بالفعل');
   const { lastInsertRowid } = run(
-    'INSERT INTO users (name, email, password_hash, role, phone) VALUES (?, ?, ?, ?, ?)',
+    'INSERT INTO users (name, email, password_hash, role, phone, status) VALUES (?, ?, ?, ?, ?, ?)',
     name.trim(),
     normalized,
     bcrypt.hashSync(password, 10),
     role,
     phone?.trim() || null,
+    status,
   );
   return get('SELECT * FROM users WHERE id = ?', lastInsertRowid);
 }

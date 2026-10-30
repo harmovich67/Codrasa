@@ -4,7 +4,7 @@ import { api, tokenStore, setUnauthorizedHandler } from '../lib/api.js';
 export const useAuth = create((set, getState) => ({
   user: null,
   ready: false,
-  platform: { platform_name: 'Codrasa', allow_registration: true, currency: 'ج.م' },
+  platform: { platform_name: 'Codrasa', allow_registration: true, currency: 'ج.م', payment_phone: '+201022596130' },
 
   async init() {
     const platform = await api.get('/settings/public').catch(() => null);
@@ -29,7 +29,9 @@ export const useAuth = create((set, getState) => ({
   },
 
   async authenticate(path, body) {
-    const { token, user } = await api.post(path, body);
+    const { token, user, pending } = await api.post(path, body);
+    // Self-registration waits for the teacher's approval: no session yet.
+    if (pending) return { pending: true };
     tokenStore.set(token);
     set({ user });
     return user;

@@ -65,12 +65,11 @@ export default function Layout() {
   const more = nav.filter((item) => !item.tab);
   const badges = { requests: pendingRequests };
 
-  // Refresh the "requests waiting" badge on every page change.
+  // Refresh the "requests waiting" badge (course requests + new registrations) on every page change.
   useEffect(() => {
     if (!isTeacher) return;
-    api
-      .get('/requests?status=pending')
-      .then((list) => setPendingRequests(list.length))
+    Promise.all([api.get('/requests?status=pending'), api.get('/students/pending')])
+      .then(([requests, students]) => setPendingRequests(requests.length + students.length))
       .catch(() => {});
   }, [isTeacher, pathname]);
 
