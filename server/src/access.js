@@ -7,8 +7,9 @@ export const isEnrolled = (userId, courseId) =>
 // Teachers see everything; students only see published lessons of courses they're enrolled in.
 export function loadLessonFor(user, lessonId) {
   const lesson = get(
-    `SELECT l.*, c.title AS course_title, c.published AS course_published
-     FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id = ?`,
+    `SELECT l.*, c.title AS course_title, c.published AS course_published,
+       COALESCE(s.kind, 'code') AS kind, s.name AS subject_name
+     FROM lessons l JOIN courses c ON c.id = l.course_id LEFT JOIN subjects s ON s.id = c.subject_id WHERE l.id = ?`,
     lessonId,
   );
   if (!lesson) throw httpError(404, 'الدرس غير موجود');

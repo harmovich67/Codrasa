@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { all } from './db.js';
+import { all, getSetting } from './db.js';
 import { httpError, parseJSON } from './utils.js';
 
 export const normalizeOutput = (value) => String(value ?? '').replaceAll('\r\n', '\n').trim();
@@ -53,6 +53,12 @@ export function checkpointsFor(lesson, userId, teacher = false) {
     return { ...(teacher ? checkpoint : visible), revision, progress: { passed: !!attempt?.passed, attempts: attempt?.attempts || 0, code: attempt?.code ?? null } };
   });
 }
+
+// Interactive questions can be switched off for the whole platform or per lesson; the lesson's own switch wins.
+export const questionsEnabledFor = (lesson) => (lesson.questions_mode ? lesson.questions_mode === 'on' : getSetting('questions_enabled', '1') === '1');
+
+// What a given viewer actually has to deal with: students get nothing when the feature is off.
+export const activeCheckpoints = (lesson, userId, teacher = false) => (teacher || questionsEnabledFor(lesson) ? checkpointsFor(lesson, userId, teacher) : []);
 
 export const requiredComplete = (checkpoints) => checkpoints.every((checkpoint) => !checkpoint.required || checkpoint.progress.passed);
 

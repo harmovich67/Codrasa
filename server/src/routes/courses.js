@@ -3,6 +3,7 @@ import { all, get, run, tx } from '../db.js';
 import { requireAuth, requireTeacher } from '../auth.js';
 import { isEnrolled } from '../access.js';
 import { httpError, toInt } from '../utils.js';
+import { defaultSubjectId } from './subjects.js';
 
 const r = Router();
 r.use(requireAuth);
@@ -15,21 +16,21 @@ const LESSON_LIST_COLUMNS = `id, title, position, published, duration_ms, langua
 r.get('/', (req, res) => {
   if (req.user.role === 'teacher') {
     return res.json(
-      all(`SELECT c.*,
+      all(`SELECT c.*, s.name AS subject_name, s.kind AS subject_kind,
         (SELECT COUNT(*) FROM lessons l WHERE l.course_id = c.id) AS lesson_count,
         (SELECT COUNT(*) FROM enrollments e WHERE e.course_id = c.id) AS student_count
-      FROM courses c ORDER BY c.created_at DESC`),
+      FROM courses c LEFT JOIN subjects s ON s.id = c.subject_id ORDER BY c.created_at DESC`),
     );
   }
   res.json(
     all(
-      `SELECT c.id, c.title, c.description, c.color, c.price, c.private,
+      `SELECT c.id, c.title, c.description, c.color, c.price, c.private, s.name AS subject_name, s.kind AS subject_kind,
         (SELECT COUNT(*) FROM lessons l WHERE l.course_id = c.id AND l.published = 1) AS lesson_count,
         EXISTS (SELECT 1 FROM enrollments e WHERE e.course_id = c.id AND e.user_id = ?) AS enrolled,
         (SELECT r.status FROM enrollment_requests r WHERE r.course_id = c.id AND r.user_id = ? ORDER BY r.id DESC LIMIT 1) AS request_status,
         (SELECT COUNT(*) FROM progress p JOIN lessons l ON l.id = p.lesson_id
           WHERE l.course_id = c.id AND l.published = 1 AND p.user_id = ? AND p.completed = 1) AS completed_count
-      FROM courses c
+      FROM courses c LEFT JOIN subjects s ON s.id = c.subject_id
       WHERE c.published = 1
         AND (c.private = 0 OR EXISTS (SELECT 1 FROM enrollments e WHERE e.course_id = c.id AND e.user_id = ?))
       ORDER BY c.created_at DESC`,
@@ -44,6 +45,8 @@ r.get('/', (req, res) => {
 function courseFields(body) {
   const title = String(body.title || '').trim();
   if (!title) throw httpError(400, 'عنوان الكورس مطلوب');
+  const subjectId = body.subject_id ? toInt(body.subject_id) : defaultSubjectId();
+  if (!get('SELECT id FROM subjects WHERE id = ?', subjectId)) throw httpError(400, 'اختار مادة صالحة للكورس');
   return [
     title,
     body.description?.trim() || null,
@@ -51,12 +54,13 @@ function courseFields(body) {
     Math.max(0, Number(body.price) || 0),
     body.published ? 1 : 0,
     body.private ? 1 : 0,
+    subjectId,
   ];
 }
 
 r.post('/', requireTeacher, (req, res) => {
   const { lastInsertRowid } = run(
-    'INSERT INTO courses (title, description, color, price, published, private) VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT INTO courses (title, description, color, price, published, private, subject_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
     ...courseFields(req.body),
   );
   res.json(get('SELECT * FROM courses WHERE id = ?', lastInsertRowid));
@@ -64,7 +68,14 @@ r.post('/', requireTeacher, (req, res) => {
 
 r.put('/:id', requireTeacher, (req, res) => {
   const id = toInt(req.params.id);
-  run('UPDATE courses SET title = ?, description = ?, color = ?, price = ?, published = ?, private = ? WHERE id = ?', ...courseFields(req.body), id);
+  const fields = courseFields(req.body);
+  // Lessons are recorded for one kind (editor events vs board strokes), so a course with lessons can't switch kind.
+  const kindOf = (subjectId) => get('SELECT kind FROM subjects WHERE id = ?', subjectId)?.kind;
+  const current = get('SELECT subject_id FROM courses WHERE id = ?', id);
+  if (current && current.subject_id !== fields.at(-1) && kindOf(current.subject_id) !== kindOf(fields.at(-1)) && get('SELECT 1 AS x FROM lessons WHERE course_id = ? LIMIT 1', id)) {
+    throw httpError(409, 'الكورس فيه دروس مسجّلة — مينفعش تنقله لمادة بنوع مختلف (برمجة ↔ سبورة)');
+  }
+  run('UPDATE courses SET title = ?, description = ?, color = ?, price = ?, published = ?, private = ?, subject_id = ? WHERE id = ?', ...fields, id);
   res.json(get('SELECT * FROM courses WHERE id = ?', id));
 });
 
@@ -75,7 +86,7 @@ r.delete('/:id', requireTeacher, (req, res) => {
 
 r.get('/:id', (req, res) => {
   const id = toInt(req.params.id);
-  const course = get('SELECT * FROM courses WHERE id = ?', id);
+  const course = get('SELECT c.*, s.name AS subject_name, s.kind AS subject_kind FROM courses c LEFT JOIN subjects s ON s.id = c.subject_id WHERE c.id = ?', id);
   const hidden = req.user.role !== 'teacher' && (!course?.published || (course.private && !isEnrolled(req.user.id, id)));
   if (!course || hidden) throw httpError(404, 'الكورس غير موجود');
 
@@ -148,12 +159,13 @@ r.post('/:id/lessons', requireTeacher, (req, res) => {
   const title = String(req.body.title || '').trim();
   if (!title) throw httpError(400, 'عنوان الدرس مطلوب');
   const next = get('SELECT COALESCE(MAX(position), -1) + 1 AS p FROM lessons WHERE course_id = ?', courseId).p;
+  const kind = get('SELECT s.kind FROM courses c LEFT JOIN subjects s ON s.id = c.subject_id WHERE c.id = ?', courseId)?.kind;
   const { lastInsertRowid } = run(
     'INSERT INTO lessons (course_id, title, position, language) VALUES (?, ?, ?, ?)',
     courseId,
     title,
     next,
-    req.body.language || 'javascript',
+    kind === 'board' ? 'board' : req.body.language || 'javascript',
   );
   res.json({ id: Number(lastInsertRowid) });
 });

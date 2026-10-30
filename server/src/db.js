@@ -225,6 +225,15 @@ CREATE TABLE IF NOT EXISTS enrollment_requests (
 );
 CREATE INDEX IF NOT EXISTS idx_requests_status ON enrollment_requests(status);
 
+-- A subject decides what a lesson is recorded on: 'code' = Monaco editor, 'board' = whiteboard.
+CREATE TABLE IF NOT EXISTS subjects (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'code' CHECK (kind IN ('code', 'board')),
+  color TEXT NOT NULL DEFAULT '#6c4cf6',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS settings (
   key TEXT PRIMARY KEY,
   value TEXT
@@ -262,6 +271,16 @@ function openDb() {
   // How the student says they paid for a requested course, so the teacher can match the transfer.
   if (!hasColumn('enrollment_requests', 'payment_method')) conn.exec('ALTER TABLE enrollment_requests ADD COLUMN payment_method TEXT');
   if (!hasColumn('enrollment_requests', 'payment_ref')) conn.exec('ALTER TABLE enrollment_requests ADD COLUMN payment_ref TEXT');
+  // Subjects: every course belongs to one; the first run seeds "programming" (the code editor).
+  if (!hasColumn('courses', 'subject_id')) conn.exec('ALTER TABLE courses ADD COLUMN subject_id INTEGER REFERENCES subjects(id)');
+  if (!conn.prepare('SELECT 1 FROM subjects LIMIT 1').get()) {
+    conn.exec("INSERT INTO subjects (name, kind, color) VALUES ('البرمجة', 'code', '#6c4cf6')");
+  }
+  conn.exec("UPDATE courses SET subject_id = (SELECT id FROM subjects ORDER BY (kind = 'code') DESC, id LIMIT 1) WHERE subject_id IS NULL");
+  // Lessons recorded in several sittings keep one audio part per sitting: [{ file, start, dur }].
+  if (!hasColumn('lessons', 'audio_parts')) conn.exec('ALTER TABLE lessons ADD COLUMN audio_parts TEXT');
+  // questions_mode: NULL = follow the platform setting, 'on' / 'off' = the teacher's override for this lesson's interactive questions.
+  if (!hasColumn('lessons', 'questions_mode')) conn.exec('ALTER TABLE lessons ADD COLUMN questions_mode TEXT');
   return conn;
 }
 

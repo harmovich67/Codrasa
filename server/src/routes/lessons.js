@@ -8,7 +8,7 @@ import { requireAuth, requireTeacher } from '../auth.js';
 import { loadLessonFor } from '../access.js';
 import { httpError, toInt, parseJSON } from '../utils.js';
 import { aiEnabledFor } from '../ai.js';
-import { checkpointsFor, checkpointRevision, gradeCheckpoint, requiredComplete, validateCheckpoints } from '../checkpoints.js';
+import { activeCheckpoints, checkpointsFor, checkpointRevision, gradeCheckpoint, questionsEnabledFor, requiredComplete, validateCheckpoints } from '../checkpoints.js';
 
 const r = Router();
 r.use(requireAuth);
@@ -27,6 +27,11 @@ function removeAudio(file) {
   fs.rm(path.join(AUDIO_DIR, path.basename(file)), { force: true }, () => {});
 }
 
+// A lesson recorded in several sittings has one voice file per sitting: [{ file, start (ms on the lesson clock), dur }].
+const audioParts = (lesson) => parseJSON(lesson.audio_parts, null) ?? (lesson.audio_file ? [{ file: lesson.audio_file, start: 0, dur: null }] : []);
+const removeAllAudio = (lesson) => audioParts(lesson).forEach((part) => removeAudio(part.file));
+const MAX_AUDIO_PARTS = 30;
+
 function neighbours(lesson, user) {
   const onlyPublished = user.role === 'teacher' ? '' : 'AND published = 1';
   const ids = all(`SELECT id FROM lessons WHERE course_id = ? ${onlyPublished} ORDER BY position, id`, lesson.course_id).map((x) => x.id);
@@ -42,10 +47,12 @@ r.get('/:id', (req, res) => {
     ...lesson,
     recording: parseJSON(lesson.recording),
     audio_url: lesson.audio_file ? `/uploads/audio/${lesson.audio_file}` : null,
+    audio_parts: audioParts(lesson).map((part) => ({ url: `/uploads/audio/${part.file}`, start: part.start || 0, dur: part.dur ?? null })),
     // Answers stay on the server for students — grading happens in POST /:id/quiz.
     quiz: quiz && (isTeacher ? quiz : quiz.map(({ q, options }) => ({ q, options }))),
-    checkpoints: checkpointsFor(lesson, req.user.id, isTeacher),
+    checkpoints: activeCheckpoints(lesson, req.user.id, isTeacher),
     ai_enabled: aiEnabledFor(lesson),
+    questions_enabled: questionsEnabledFor(lesson),
     ...neighbours(lesson, req.user),
   };
   if (!isTeacher) {
@@ -76,13 +83,18 @@ r.put('/:id', requireTeacher, (req, res) => {
   for (const col of ['description', 'notes', 'summary', 'language']) if (col in b) set(col, b[col] ?? null);
   if ('published' in b) set('published', b.published ? 1 : 0);
   if ('ai_mode' in b) set('ai_mode', ['on', 'off'].includes(b.ai_mode) ? b.ai_mode : null);
+  if ('questions_mode' in b) set('questions_mode', ['on', 'off'].includes(b.questions_mode) ? b.questions_mode : null);
   if ('quiz' in b) set('quiz', Array.isArray(b.quiz) && b.quiz.length ? JSON.stringify(b.quiz) : null);
   if ('recording' in b) {
     set('recording', b.recording ? JSON.stringify(b.recording) : null);
     set('duration_ms', Math.round(b.recording?.duration || 0));
     // A new recording invalidates the old voice track; the client uploads the new one right after.
-    set('audio_file', null);
-    removeAudio(lesson.audio_file);
+    // Continuing a recording (keep_audio) keeps it: the new sitting's voice is appended as another part.
+    if (!b.keep_audio) {
+      set('audio_file', null);
+      set('audio_parts', null);
+      removeAllAudio(lesson);
+    }
   }
   if (sets.length) {
     set('updated_at', new Date().toISOString().replace('T', ' ').slice(0, 19));
@@ -91,7 +103,7 @@ r.put('/:id', requireTeacher, (req, res) => {
       if (sets.includes('checkpoints = ?')) {
         const updated = get('SELECT * FROM lessons WHERE id = ?', id);
         for (const progress of all('SELECT user_id FROM progress WHERE lesson_id = ? AND completed = 1', id)) {
-          if (!requiredComplete(checkpointsFor(updated, progress.user_id))) run('UPDATE progress SET completed = 0 WHERE user_id = ? AND lesson_id = ?', progress.user_id, id);
+          if (!requiredComplete(activeCheckpoints(updated, progress.user_id))) run('UPDATE progress SET completed = 0 WHERE user_id = ? AND lesson_id = ?', progress.user_id, id);
         }
       }
     });
@@ -100,28 +112,41 @@ r.put('/:id', requireTeacher, (req, res) => {
 });
 
 r.delete('/:id', requireTeacher, (req, res) => {
-  const lesson = get('SELECT audio_file FROM lessons WHERE id = ?', toInt(req.params.id));
+  const lesson = get('SELECT audio_file, audio_parts FROM lessons WHERE id = ?', toInt(req.params.id));
   run('DELETE FROM lessons WHERE id = ?', toInt(req.params.id));
-  removeAudio(lesson?.audio_file);
+  if (lesson) removeAllAudio(lesson);
   res.json({ ok: true });
 });
 
 r.post('/:id/audio', requireTeacher, upload.single('audio'), (req, res) => {
   const id = toInt(req.params.id);
   if (!req.file) throw httpError(400, 'لم يصل ملف صوت صالح');
-  const lesson = get('SELECT audio_file FROM lessons WHERE id = ?', id);
+  const lesson = get('SELECT audio_file, audio_parts FROM lessons WHERE id = ?', id);
   if (!lesson) {
     removeAudio(req.file.filename);
     throw httpError(404, 'الدرس غير موجود');
   }
-  run('UPDATE lessons SET audio_file = ? WHERE id = ?', req.file.filename, id);
-  removeAudio(lesson.audio_file);
-  res.json({ audio_url: `/uploads/audio/${req.file.filename}` });
+  const start = Math.max(0, Math.round(Number(req.query.start) || 0));
+  const dur = Number(req.query.dur) > 0 ? Math.round(Number(req.query.dur)) : null;
+  let parts;
+  if (req.query.append === '1') {
+    parts = audioParts(lesson);
+    if (parts.length >= MAX_AUDIO_PARTS) {
+      removeAudio(req.file.filename);
+      throw httpError(400, 'وصلت للحد الأقصى لعدد مقاطع الصوت في الدرس');
+    }
+    parts.push({ file: req.file.filename, start, dur });
+  } else {
+    removeAllAudio(lesson);
+    parts = [{ file: req.file.filename, start, dur }];
+  }
+  run('UPDATE lessons SET audio_file = ?, audio_parts = ? WHERE id = ?', parts[0].file, JSON.stringify(parts), id);
+  res.json({ audio_url: `/uploads/audio/${parts[0].file}`, parts: parts.length });
 });
 
 r.post('/:id/progress', (req, res) => {
   const lesson = loadLessonFor(req.user, toInt(req.params.id));
-  const complete = requiredComplete(checkpointsFor(lesson, req.user.id));
+  const complete = requiredComplete(activeCheckpoints(lesson, req.user.id));
   run(
     `INSERT INTO progress (user_id, lesson_id, position_ms, completed, updated_at) VALUES (?, ?, ?, ?, datetime('now'))
      ON CONFLICT(user_id, lesson_id) DO UPDATE SET
@@ -138,6 +163,7 @@ r.post('/:id/progress', (req, res) => {
 
 r.post('/:id/checkpoints/:checkpointId/attempt', (req, res) => {
   const lesson = loadLessonFor(req.user, toInt(req.params.id));
+  if (req.user.role !== 'teacher' && !questionsEnabledFor(lesson)) throw httpError(409, 'الأسئلة التفاعلية متوقفة في الدرس ده');
   const checkpoint = parseJSON(lesson.checkpoints, []).find((entry) => entry.id === req.params.checkpointId);
   if (!checkpoint) throw httpError(404, 'التحدي غير موجود');
   const revision = checkpointRevision(checkpoint);
@@ -153,7 +179,7 @@ r.post('/:id/checkpoints/:checkpointId/attempt', (req, res) => {
          code = excluded.code, output = excluded.output, updated_at = datetime('now')`,
       req.user.id, lesson.id, checkpoint.id, revision, passed, checkpoint.type === 'code' ? req.body.code : null, checkpoint.type === 'code' ? req.body.output : null,
     );
-    if (requiredComplete(checkpointsFor(lesson, req.user.id))) {
+    if (requiredComplete(activeCheckpoints(lesson, req.user.id))) {
       run('UPDATE progress SET completed = 1 WHERE user_id = ? AND lesson_id = ? AND position_ms >= ? AND position_ms > 0', req.user.id, lesson.id, Math.max(0, lesson.duration_ms - 1000));
     }
     return get('SELECT passed, attempts FROM checkpoint_attempts WHERE user_id = ? AND lesson_id = ? AND checkpoint_id = ? AND revision = ?', req.user.id, lesson.id, checkpoint.id, revision);

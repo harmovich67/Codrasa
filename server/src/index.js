@@ -16,6 +16,7 @@ import settingsRoutes from './routes/settings.js';
 import dashboardRoutes from './routes/dashboard.js';
 import requestRoutes from './routes/requests.js';
 import skillRoutes from './routes/skills.js';
+import subjectRoutes from './routes/subjects.js';
 import { startBackups } from './backup.js';
 
 const app = express();
@@ -75,6 +76,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/requests', requestRoutes);
 app.use('/api/skills', skillRoutes);
+app.use('/api/subjects', subjectRoutes);
 app.use('/api', (req, res) => res.status(404).json({ error: 'المسار غير موجود' }));
 
 // In production the built client is served from the same origin.

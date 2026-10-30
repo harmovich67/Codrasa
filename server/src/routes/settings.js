@@ -16,6 +16,8 @@ const DEFAULTS = {
   ai_daily_limit: '30',
   student_smart: '0',
   student_ai: '1',
+  // Interactive questions: the lesson stops at a question until the student answers it.
+  questions_enabled: '1',
 };
 
 const read = () => Object.fromEntries(Object.entries(DEFAULTS).map(([k, v]) => [k, getSetting(k) ?? v]));
@@ -29,6 +31,7 @@ r.get('/public', (req, res) => {
     payment_phone: s.payment_phone,
     student_smart: s.student_smart === '1',
     student_ai: s.student_ai === '1',
+    questions_enabled: s.questions_enabled === '1',
   });
 });
 

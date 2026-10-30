@@ -17,7 +17,8 @@ const mmss = (ms) => {
 };
 
 function lessonContext(lesson, { withNotes = false } = {}) {
-  const parts = [`الكورس: ${lesson.course_title}`, `الدرس: ${lesson.title}`, `اللغة: ${lesson.language}`];
+  const board = lesson.kind === 'board';
+  const parts = [`الكورس: ${lesson.course_title}`, ...(lesson.subject_name ? [`المادة: ${lesson.subject_name}`] : []), `الدرس: ${lesson.title}`, board ? 'الدرس يُشرح على سبورة رقمية (رسم وكتابة بخط اليد) وليس بالكود' : `اللغة: ${lesson.language}`];
   if (lesson.description) parts.push(`وصف الدرس:\n${lesson.description}`);
   if (lesson.summary) parts.push(`ملخص الدرس:\n${lesson.summary}`);
   if (withNotes && lesson.notes) parts.push(`ملاحظات المدرّس (سكريبت الشرح):\n${lesson.notes}`);
@@ -86,9 +87,11 @@ r.post('/chat', async (req, res) => {
     '',
     lessonContext(lesson),
     '',
-    `الكود عند اللحظة ${mmss(req.body.t_ms)} من الدرس:`,
-    fence(lesson.language, String(req.body.code || '').slice(0, 30000)),
-    req.body.line ? `المؤشر الآن على السطر ${toInt(req.body.line)}.` : '',
+    lesson.kind === 'board'
+      ? `الطالب الآن عند اللحظة ${mmss(req.body.t_ms)} من الدرس. لا ترى محتوى السبورة نفسه، فاعتمد على وصف الدرس وملخصه وعلى ما كتبه المدرّس، ولا تخترع ما رسمه.`
+      : `الكود عند اللحظة ${mmss(req.body.t_ms)} من الدرس:`,
+    lesson.kind === 'board' ? '' : fence(lesson.language, String(req.body.code || '').slice(0, 30000)),
+    req.body.line && lesson.kind !== 'board' ? `المؤشر الآن على السطر ${toInt(req.body.line)}.` : '',
     req.body.output ? `ناتج آخر تشغيل:\n${fence('text', String(req.body.output).slice(0, 4000))}` : '',
     checkpoint ? checkpointContext(checkpoint) : '',
     helpLevel ? `\nمستوى المساعدة المطلوب الآن:\n${HELP_LEVELS[helpLevel]}` : '',
@@ -138,8 +141,11 @@ const QUIZ_SCHEMA = {
 // Teacher tools: lesson summary and quiz generation.
 r.post('/generate', requireTeacher, async (req, res) => {
   const lesson = loadLessonFor(req.user, toInt(req.body.lessonId));
-  const finalCode = codeAt(parseJSON(lesson.recording));
-  const context = `${lessonContext(lesson, { withNotes: true })}\n\nالكود النهائي للدرس:\n${fence(lesson.language, finalCode.slice(0, 30000))}`;
+  const finalCode = lesson.kind === 'board' ? '' : codeAt(parseJSON(lesson.recording));
+  const context =
+    lesson.kind === 'board'
+      ? lessonContext(lesson, { withNotes: true })
+      : `${lessonContext(lesson, { withNotes: true })}\n\nالكود النهائي للدرس:\n${fence(lesson.language, finalCode.slice(0, 30000))}`;
   const model = modelFor(req.body.tier || 'smart', req.user);
 
   if (req.body.kind === 'summary') {
