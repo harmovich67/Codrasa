@@ -17,12 +17,16 @@ fs.mkdirSync(AUDIO_DIR, { recursive: true });
 const seedDb = path.join(root, 'data', 'codrasa.db');
 const targetDb = path.join(DATA_DIR, 'codrasa.db');
 
-const NEON_URL = process.env.DATABASE_URL || 'postgresql://neondb_owner:REDACTED_PASSWORD@ep-rough-rain-b457i2gr-pooler.c-6.us-east-2.aws.neon.tech/neondb?sslmode=require';
+// Cloud snapshot sync is optional: without DATABASE_URL the app runs on the local SQLite file only.
 let sqlClient = null;
-try {
-  sqlClient = neon(NEON_URL);
-} catch (e) {
-  console.warn('[DB] Neon client init error:', e.message);
+if (process.env.DATABASE_URL) {
+  try {
+    sqlClient = neon(process.env.DATABASE_URL);
+  } catch (e) {
+    console.warn('[DB] Neon client init error:', e.message);
+  }
+} else {
+  console.warn('[DB] DATABASE_URL not set — cloud sync disabled, using local database only.');
 }
 
 export async function syncFromCloud() {
