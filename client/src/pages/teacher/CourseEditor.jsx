@@ -128,7 +128,7 @@ export default function CourseEditor() {
         </div>
       </PageHeader>
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="space-y-3 lg:col-span-2">
           <form onSubmit={addLesson} className="flex flex-col gap-2 sm:flex-row">
             <Input

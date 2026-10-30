@@ -381,28 +381,54 @@ function Recorder({ lesson, form, set, reload }) {
   );
 }
 
+// A form field with its label row and a "generate with Gemini" button beside it.
+function AiField({ label, hint, onGenerate, busy, disabled, children }) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium text-muted">{label}</span>
+        <Button size="sm" variant="subtle" icon={Sparkles} onClick={onGenerate} loading={busy} disabled={disabled}>
+          ولّد بـ Gemini
+        </Button>
+      </div>
+      {children}
+      {hint && <span className="block text-xs text-muted/70">{hint}</span>}
+    </div>
+  );
+}
+
+// What each AI draft is called, which form field it fills, and what to say when it lands.
+const DRAFTS = {
+  summary: { field: 'summary', name: 'الملخص' },
+  description: { field: 'description', name: 'الوصف' },
+  script: { field: 'notes', name: 'السكريبت' },
+};
+
 function ContentTab({ lesson, form, set, saveMeta }) {
-  const [generating, setGenerating] = useState(false);
+  const [generating, setGenerating] = useState(null); // which draft is being written
   const [preview, setPreview] = useState(false);
 
-  async function generateSummary() {
-    setGenerating(true);
+  async function generate(kind) {
+    const { field, name } = DRAFTS[kind];
+    if (kind !== 'summary' && form[field].trim() && !window.confirm(`${name} الحالي هيتستبدل بنسخة جديدة. نكمل؟`)) return;
+    setGenerating(kind);
     try {
       await saveMeta({ silent: true });
-      const { summary, model } = await api.post('/ai/generate', { lessonId: lesson.id, kind: 'summary' });
-      set('summary', summary);
-      setPreview(true);
-      toast.success(`اتولد الملخص بـ ${model} — راجعه واحفظ`);
+      const res = await api.post('/ai/generate', { lessonId: lesson.id, kind });
+      set(field, res[field]);
+      if (kind === 'summary') setPreview(true);
+      toast.success(`اتولد ${name} بـ ${res.model} — راجعه واحفظ`);
     } catch (err) {
       toast.error(err);
     } finally {
-      setGenerating(false);
+      setGenerating(null);
     }
   }
 
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
-      <Card className="space-y-4 p-5">
+    // grid-cols-1 = minmax(0, 1fr): a plain `grid` track is `auto` and grows to fit wide generated content (code, tables).
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <Card className="min-w-0 space-y-4 p-5">
         <Field label="المساعد الذكي للطلاب في الدرس ده" hint="الافتراضي بيتبع الإعدادات العامة للمنصة. «مخفي» بيشيل تبويب المساعد وأزرار المساعدة في التحديات.">
           <Select value={form.ai_mode} onChange={(e) => set('ai_mode', e.target.value)}>
             <option value="">الافتراضي (حسب الإعدادات)</option>
@@ -410,27 +436,33 @@ function ContentTab({ lesson, form, set, saveMeta }) {
             <option value="off">مخفي عن الطلاب</option>
           </Select>
         </Field>
-        <Field label="وصف الدرس (بيظهر للطلاب)">
+        <AiField label="وصف الدرس (بيظهر للطلاب)" onGenerate={() => generate('description')} busy={generating === 'description'} disabled={!!generating}>
           <Textarea value={form.description} onChange={(e) => set('description', e.target.value)} rows={4} />
-        </Field>
-        <Field label="سكريبت الشرح / التلقين (خاص بيك)" hint="بيظهر جنبك وانت بتسجل، والمساعد بيستخدمه كسياق لما يولّد الملخص والاختبار.">
+        </AiField>
+        <AiField
+          label="سكريبت الشرح / التلقين (خاص بيك)"
+          hint="بيظهر جنبك وانت بتسجل، والمساعد بيستخدمه كسياق لما يولّد الملخص والاختبار. Gemini بيكتبلك مسودة تعدّل عليها، ولو كتبت نقاط الأول بيطوّرها."
+          onGenerate={() => generate('script')}
+          busy={generating === 'script'}
+          disabled={!!generating}
+        >
           <Textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} rows={10} />
-        </Field>
+        </AiField>
       </Card>
-      <Card className="space-y-3 p-5">
-        <div className="flex items-center justify-between gap-2">
+      <Card className="min-w-0 space-y-3 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-sm font-medium">ملخص الدرس (Markdown)</span>
           <div className="flex gap-2">
             <Button size="sm" variant="ghost" onClick={() => setPreview(!preview)}>
               {preview ? 'تعديل' : 'معاينة'}
             </Button>
-            <Button size="sm" variant="subtle" icon={Sparkles} onClick={generateSummary} loading={generating}>
+            <Button size="sm" variant="subtle" icon={Sparkles} onClick={() => generate('summary')} loading={generating === 'summary'} disabled={!!generating}>
               ولّد بـ Gemini
             </Button>
           </div>
         </div>
         {preview ? (
-          <div className="min-h-96 rounded-lg border border-line bg-panel-2 p-4">
+          <div className="min-h-96 min-w-0 overflow-x-auto rounded-lg border border-line bg-panel-2 p-4">
             <Markdown>{form.summary || '_لسه مفيش ملخص_'}</Markdown>
           </div>
         ) : (

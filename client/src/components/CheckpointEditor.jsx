@@ -115,20 +115,25 @@ export default function CheckpointEditor({ lesson, draftRequest }) {
   return (
     <div className="space-y-4">
       <Card className="space-y-3 p-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <Target className="size-5 text-brand" />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">لحظات تفاعل إجبارية</p>
-            <p className="text-xs leading-6 text-muted">
-              الدرس بيقف عند اللحظة دي ومبيكمّلش لحد ما الطالب يحلّ التحدي. كل تحدي مربوط بمهارة، ومنها بتتبني خريطة مهارات الطالب.
-            </p>
+        {/* phone: text on top, the two buttons side by side below; wider: one row */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex min-w-0 flex-1 items-start gap-3">
+            <Target className="mt-0.5 size-5 shrink-0 text-brand" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium">لحظات تفاعل إجبارية</p>
+              <p className="text-xs leading-6 text-muted">
+                الدرس بيقف عند اللحظة دي ومبيكمّلش لحد ما الطالب يحلّ التحدي. كل تحدي مربوط بمهارة، ومنها بتتبني خريطة مهارات الطالب.
+              </p>
+            </div>
           </div>
-          <Button variant="subtle" icon={Plus} onClick={() => add(0)}>
-            تحدي جديد
-          </Button>
-          <Button icon={Save} onClick={save} loading={saving} disabled={!dirty}>
-            حفظ التحديات
-          </Button>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:shrink-0">
+            <Button variant="subtle" icon={Plus} onClick={() => add(0)}>
+              تحدي جديد
+            </Button>
+            <Button icon={Save} onClick={save} loading={saving} disabled={!dirty}>
+              حفظ التحديات
+            </Button>
+          </div>
         </div>
         {suggestions.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3 text-xs text-muted">
@@ -182,31 +187,34 @@ function Challenge({ index, item: c, stat, language, duration, update, remove })
   const setOption = (j, value) => update({ options: c.options.map((o, k) => (k === j ? value : o)) });
 
   return (
-    <Card className="space-y-4 p-4">
-      <div className="flex flex-wrap items-center gap-3">
+    <Card className="min-w-0 space-y-4 p-4">
+      {/* phone: [#n · time · type] on the first row, [required · stats · delete] on the second */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <Badge color="brand">#{index}</Badge>
         <TimeInput value={c.t_ms} onChange={(t_ms) => update({ t_ms: Math.min(duration, t_ms) })} />
-        <Select value={c.type} onChange={(e) => update({ type: e.target.value })} className="w-40">
+        <Select value={c.type} onChange={(e) => update({ type: e.target.value })} className="min-w-0 flex-1 sm:w-40 sm:flex-none">
           <option value="choice">اختيار من متعدد</option>
           {canCode && <option value="code">تحدي كود</option>}
           {!canCode && c.type === 'code' && <option value="code">تحدي كود</option>}
         </Select>
-        <Toggle checked={c.required} onChange={(required) => update({ required })} label={c.required ? 'إجباري' : 'اختياري'} />
-        <div className="flex-1" />
-        {stat && stat.learners > 0 && (
-          <span className="text-xs text-muted" title="الطلاب اللي جرّبوه / نجحوا / متوسط المحاولات">
-            {stat.passed}/{stat.learners} نجحوا · {stat.avg_attempts} محاولة في المتوسط
-            {stat.stuck > 0 && <span className="text-rose"> · {stat.stuck} متعطل</span>}
-          </span>
-        )}
-        <IconButton icon={Trash2} title="حذف التحدي" onClick={remove} />
+        <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 sm:w-auto sm:flex-1">
+          <Toggle checked={c.required} onChange={(required) => update({ required })} label={c.required ? 'إجباري' : 'اختياري'} />
+          <div className="flex-1" />
+          {stat && stat.learners > 0 && (
+            <span className="text-xs text-muted" title="الطلاب اللي جرّبوه / نجحوا / متوسط المحاولات">
+              {stat.passed}/{stat.learners} نجحوا · {stat.avg_attempts} محاولة في المتوسط
+              {stat.stuck > 0 && <span className="text-rose"> · {stat.stuck} متعطل</span>}
+            </span>
+          )}
+          <IconButton icon={Trash2} title="حذف التحدي" onClick={remove} />
+        </div>
       </div>
 
       {c.type === 'code' && !canCode && (
         <p className="rounded-lg border border-rose/30 bg-rose/10 px-3 py-2 text-xs text-rose">تحديات الكود متاحة لدروس JavaScript وPython فقط — حوّل النوع لاختيار من متعدد.</p>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="عنوان التحدي">
           <Input value={c.title} onChange={(e) => update({ title: e.target.value })} placeholder="مثلًا: غيّر قيمة المتغير" />
         </Field>
@@ -250,7 +258,7 @@ function Challenge({ index, item: c, stat, language, duration, update, remove })
           <span className="flex items-center gap-1.5 text-xs font-medium text-muted">
             <Code2 className="size-3.5" /> الكود بيتصحّح بمقارنة الناتج (console.log / print) بالناتج المتوقع
           </span>
-          <div className="grid gap-3 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             <Field label="كود البداية اللي هيظهر للطالب">
               <Textarea dir="ltr" value={c.starter_code} onChange={(e) => update({ starter_code: e.target.value })} rows={6} className="font-mono text-[13px]" />
             </Field>

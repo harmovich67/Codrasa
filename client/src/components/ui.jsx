@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2, X, CircleCheck, CircleAlert, Info } from 'lucide-react';
 import { useToasts } from '../store/toast.js';
@@ -198,11 +198,18 @@ export function Stat({ icon: Icon, label, value, hint, tone = 'brand' }) {
 
 // fill: tabs share the full width equally (forms), instead of hugging their labels.
 export function Tabs({ tabs, value, onChange, className, fill }) {
+  const bar = useRef(null);
+  // On phones the bar scrolls sideways: keep the active tab in view (e.g. when opened with ?tab=…).
+  useEffect(() => {
+    bar.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+  }, [value]);
   return (
-    <div className={cx('flex gap-1 overflow-x-auto rounded-2xl border border-line bg-panel p-1 shadow-card [scrollbar-width:none]', className)}>
+    <div ref={bar} role="tablist" className={cx('flex gap-1 overflow-x-auto rounded-2xl border border-line bg-panel p-1 shadow-card [scrollbar-width:none]', className)}>
       {tabs.map((t) => (
         <button
           key={t.id}
+          role="tab"
+          aria-selected={value === t.id}
           type="button"
           onClick={() => onChange(t.id)}
           className={cx(

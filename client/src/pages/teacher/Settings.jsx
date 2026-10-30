@@ -64,7 +64,7 @@ export default function Settings() {
           </Button>
         }
       />
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Card className="space-y-4 p-5">
           <h2 className="flex items-center gap-2 font-semibold">
             <SettingsIcon className="size-4.5 text-brand" /> المنصة

@@ -122,7 +122,7 @@ export default function StudentDetail() {
         </div>
       </PageHeader>
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="space-y-5 lg:col-span-2">
           <Box
             icon={BookOpen}
@@ -199,7 +199,7 @@ export default function StudentDetail() {
             )}
           </Box>
 
-          <div className="grid gap-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <Box icon={Activity} title="آخر نشاط">
               {s.activity.length === 0 ? (
                 <p className="text-sm text-muted">لسه مبدأش.</p>

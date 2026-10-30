@@ -150,6 +150,24 @@ r.post('/generate', requireTeacher, async (req, res) => {
     return res.json({ summary: text.trim(), model });
   }
 
+  // The short blurb students see above the lesson.
+  if (req.body.kind === 'description') {
+    const text = await generate(
+      model,
+      `${context}\n\nاكتب وصفًا قصيرًا لهذا الدرس يظهر للطالب قبل أن يبدأ: جملتان إلى ثلاث (حتى 60 كلمة) توضح ماذا سيتعلم وفيم سيفيده. بالعربية البسيطة، نص عادي بلا عناوين ولا Markdown ولا قوائم. لا تخترع محتوى غير موجود في الدرس. لو كان هناك وصف حالي فحسّنه واحتفظ بفكرته. أخرج نص الوصف فقط.`,
+    );
+    return res.json({ description: text.trim(), model });
+  }
+
+  // The teacher's private teleprompter script, read aloud while recording.
+  if (req.body.kind === 'script') {
+    const text = await generate(
+      model,
+      `${context}\n\nاكتب سكريبت شرح (تلقين) للمدرّس يقرؤه ويتحدث به أثناء تسجيل هذا الدرس كجلسة كود حية. اكتبه بلغة بسيطة مناسبة للكلام بصوت عالٍ (عامية مصرية خفيفة)، ورتّبه هكذا:\n1) جملة افتتاحية قصيرة تعرّف الطالب بما سيتعلمه.\n2) من 5 إلى 8 خطوات مرقّمة بالترتيب الذي سيُكتب به الكود في التسجيل. في كل خطوة: ماذا يقول المدرّس في سطر أو اثنين، وإن لزم كتابة كود فاكتبه في سطر مستقل يبدأ بـ «⌨️ اكتب:» ثم الكود كما هو.\n3) ضع «⏸ وقفة:» مع سؤال قصير للطالب بعد أهم فكرتين أو ثلاث.\n4) جملة ختام تلخّص الفكرة وتشير للتحدي أو الخطوة التالية.\nالنص سيظهر خامًا بجانب المدرّس، فلا تستخدم Markdown (لا # ولا ** ولا backticks). لا تتجاوز 350 كلمة، ولا تخترع شيئًا خارج موضوع الدرس. لو كانت هناك مسودة في ملاحظات المدرّس فطوّرها وحافظ على نقاطها وترتيبها. أخرج السكريبت فقط.`,
+    );
+    return res.json({ notes: text.trim(), model });
+  }
+
   if (req.body.kind === 'quiz') {
     const count = Math.min(15, Math.max(3, toInt(req.body.count) || 5));
     const text = await generate(
