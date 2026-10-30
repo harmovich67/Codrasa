@@ -196,15 +196,18 @@ export function Stat({ icon: Icon, label, value, hint, tone = 'brand' }) {
   );
 }
 
-export function Tabs({ tabs, value, onChange, className }) {
+// fill: tabs share the full width equally (forms), instead of hugging their labels.
+export function Tabs({ tabs, value, onChange, className, fill }) {
   return (
     <div className={cx('flex gap-1 overflow-x-auto rounded-2xl border border-line bg-panel p-1 shadow-card [scrollbar-width:none]', className)}>
       {tabs.map((t) => (
         <button
           key={t.id}
+          type="button"
           onClick={() => onChange(t.id)}
           className={cx(
             'inline-flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2 text-sm transition md:py-1.5',
+            fill && 'flex-1 justify-center',
             value === t.id ? 'bg-brand/10 font-medium text-brand' : 'text-muted hover:text-ink',
           )}
         >

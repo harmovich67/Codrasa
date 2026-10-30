@@ -6,6 +6,9 @@ import { toast } from '../store/toast.js';
 import { Button, Field, Input, Tabs } from '../components/ui.jsx';
 import AuthShell from './AuthShell.jsx';
 
+// Don't pop the keyboard open on phones: it would cover the form as soon as the page loads.
+const canAutoFocus = typeof window !== 'undefined' && window.matchMedia('(hover: hover)').matches;
+
 export default function Login() {
   const navigate = useNavigate();
   const { authenticate, platform } = useAuth();
@@ -47,7 +50,8 @@ export default function Login() {
     >
       {platform.allow_registration && (
         <Tabs
-          className="mb-6"
+          fill
+          className="mb-5"
           value={mode}
           onChange={setMode}
           tabs={[
@@ -64,11 +68,11 @@ export default function Login() {
       <form onSubmit={submit} className="space-y-4">
         {mode === 'register' && (
           <Field label="الاسم">
-            <Input value={form.name} onChange={set('name')} required autoFocus />
+            <Input value={form.name} onChange={set('name')} required autoFocus={canAutoFocus} />
           </Field>
         )}
         <Field label="البريد الإلكتروني">
-          <Input type="email" dir="ltr" value={form.email} onChange={set('email')} required autoFocus={mode === 'login'} />
+          <Input type="email" dir="ltr" value={form.email} onChange={set('email')} required autoFocus={canAutoFocus && mode === 'login'} />
         </Field>
         <Field label="كلمة المرور">
           <Input type="password" dir="ltr" value={form.password} onChange={set('password')} required minLength={6} />

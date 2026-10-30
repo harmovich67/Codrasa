@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { cx } from './ui.jsx';
 
 // Code lines of the "live lesson": [x offset, width, colour] segments per line.
@@ -14,42 +15,44 @@ const LINES = [
 ];
 
 export function Illustration() {
+  // The scene can be mounted twice (phone + desktop slots); duplicate ids would resolve to the hidden copy and drop its fills.
+  const uid = useId().replace(/:/g, '');
   let delay = 0;
   return (
     <svg viewBox="0 0 480 270" className="h-full w-full" role="img" aria-label="درس برمجة حي: كود بيتكتب وشريط تشغيل وتحدي">
       <defs>
-        <linearGradient id="hb-win" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={`${uid}-win`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#1b1f3b" />
           <stop offset="1" stopColor="#12152b" />
         </linearGradient>
-        <linearGradient id="hb-glow" x1="0" y1="0" x2="1" y2="1">
+        <linearGradient id={`${uid}-glow`} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor="#6c4cf6" stopOpacity="0.28" />
           <stop offset="1" stopColor="#34d3a6" stopOpacity="0.22" />
         </linearGradient>
-        <filter id="hb-shadow" filterUnits="userSpaceOnUse" x="-40" y="-40" width="560" height="360" colorInterpolationFilters="sRGB">
+        <filter id={`${uid}-shadow`} filterUnits="userSpaceOnUse" x="-40" y="-40" width="560" height="360" colorInterpolationFilters="sRGB">
           <feDropShadow dx="0" dy="14" stdDeviation="14" floodColor="#3b2fa0" floodOpacity="0.28" />
         </filter>
       </defs>
 
-      <ellipse cx="240" cy="140" rx="214" ry="118" fill="url(#hb-glow)" />
+      <ellipse cx="240" cy="140" rx="214" ry="118" fill={`url(#${uid}-glow)`} />
 
       {/* floating symbol tiles */}
       <g className="hb-float" style={{ animationDelay: '-1s' }}>
-        <rect x="26" y="52" width="58" height="58" rx="16" fill="#fff" filter="url(#hb-shadow)" />
+        <rect x="26" y="52" width="58" height="58" rx="16" fill="#fff" filter={`url(#${uid}-shadow)`} />
         <text x="55" y="89" textAnchor="middle" fontFamily="JetBrains Mono, monospace" fontWeight="700" fontSize="22" fill="var(--color-brand)">
           {'</>'}
         </text>
       </g>
       <g className="hb-float" style={{ animationDelay: '-3s' }}>
-        <rect x="402" y="26" width="48" height="48" rx="14" fill="#fff" filter="url(#hb-shadow)" />
+        <rect x="402" y="26" width="48" height="48" rx="14" fill="#fff" filter={`url(#${uid}-shadow)`} />
         <text x="426" y="58" textAnchor="middle" fontFamily="JetBrains Mono, monospace" fontWeight="700" fontSize="20" fill="#e49a1b">
           {'{ }'}
         </text>
       </g>
 
       {/* editor window */}
-      <g filter="url(#hb-shadow)">
-        <rect x="92" y="40" width="296" height="176" rx="18" fill="url(#hb-win)" />
+      <g filter={`url(#${uid}-shadow)`}>
+        <rect x="92" y="40" width="296" height="176" rx="18" fill={`url(#${uid}-win)`} />
       </g>
       <circle cx="116" cy="62" r="5" fill="#ff6b81" />
       <circle cx="132" cy="62" r="5" fill="#f5b544" />
@@ -82,7 +85,7 @@ export function Illustration() {
 
       {/* voice waveform card */}
       <g className="hb-float" style={{ animationDelay: '-2s' }}>
-        <rect x="326" y="120" width="116" height="62" rx="16" fill="#fff" filter="url(#hb-shadow)" />
+        <rect x="326" y="120" width="116" height="62" rx="16" fill="#fff" filter={`url(#${uid}-shadow)`} />
         <circle cx="348" cy="151" r="11" fill="#6c4cf61f" />
         <rect x="344" y="145" width="8" height="12" rx="4" fill="var(--color-brand)" />
         <path d="M341 153a7 7 0 0 0 14 0" fill="none" stroke="var(--color-brand)" strokeWidth="2" strokeLinecap="round" />
@@ -93,7 +96,7 @@ export function Illustration() {
 
       {/* challenge passed */}
       <g className="hb-pop">
-        <g filter="url(#hb-shadow)">
+        <g filter={`url(#${uid}-shadow)`}>
           <rect x="38" y="160" width="130" height="46" rx="14" fill="#fff" />
         </g>
         <circle cx="62" cy="183" r="12" fill="#34d3a6" />

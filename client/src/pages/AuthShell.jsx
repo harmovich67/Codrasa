@@ -10,16 +10,21 @@ const FEATURES = [
 
 export default function AuthShell({ name, title, subtitle, children }) {
   return (
-    <div className="grid h-full grid-rows-[auto] content-start overflow-y-auto lg:grid-cols-2 lg:content-stretch">
-      <div className="flex items-center justify-center px-6 py-10 pt-[max(2.5rem,env(safe-area-inset-top))] pb-[max(2.5rem,env(safe-area-inset-bottom))] lg:py-12">
-        <div className="w-full max-w-sm">
-          <div className="-mx-2 mb-6 lg:hidden">
+    <div className="grid h-full overflow-y-auto lg:grid-cols-2">
+      <div className="flex items-center justify-center px-4 py-6 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-6 lg:py-12">
+        <div className="w-full max-w-md">
+          {/* phone / tablet: a small scene above the card (the desktop one lives in the side panel) */}
+          <div className="mx-auto mb-3 aspect-[480/270] w-44 sm:w-56 lg:hidden">
             <Illustration />
           </div>
-          <Logo name={name} />
-          <h1 className="mt-8 text-2xl font-bold">{title}</h1>
-          {subtitle && <p className="mt-1.5 text-sm text-muted">{subtitle}</p>}
-          <div className="mt-8">{children}</div>
+          <div className="rounded-3xl border border-white/80 bg-panel/90 p-5 shadow-float backdrop-blur sm:p-8">
+            <div className="flex flex-col items-center text-center">
+              <Logo name={name} />
+              <h1 className="mt-5 text-2xl font-bold sm:mt-6">{title}</h1>
+              {subtitle && <p className="mt-1.5 text-sm text-muted">{subtitle}</p>}
+            </div>
+            <div className="mt-5 sm:mt-6">{children}</div>
+          </div>
         </div>
       </div>
       <div className="relative hidden overflow-hidden border-r border-line bg-gradient-to-br from-[#f3f1ff] to-[#e3e7ff] lg:flex lg:items-center lg:justify-center">

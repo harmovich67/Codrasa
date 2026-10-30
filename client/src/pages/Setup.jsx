@@ -30,7 +30,7 @@ export default function Setup() {
     <AuthShell name={platform.platform_name} title="إعداد المنصة" subtitle="أول حساب هيكون حساب المدرّس (صاحب المنصة) وله كل الصلاحيات.">
       <form onSubmit={submit} className="space-y-4">
         <Field label="اسمك">
-          <Input value={form.name} onChange={set('name')} required autoFocus />
+          <Input value={form.name} onChange={set('name')} required autoFocus={window.matchMedia('(hover: hover)').matches} />
         </Field>
         <Field label="البريد الإلكتروني">
           <Input type="email" dir="ltr" value={form.email} onChange={set('email')} required />
